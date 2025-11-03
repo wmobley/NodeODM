@@ -282,16 +282,27 @@ app.post('/task/new/commit/:uuid', authCheck, taskNew.getUUID, taskNew.handleCom
  *          schema:
  *            $ref: '#/definitions/Error'
  */
-app.post('/task/new', authCheck, taskNew.assignUUID, taskNew.uploadImages, (req, res, next) => {
-    req.body = req.body || {};
-    if ((!req.files || req.files.length === 0) && !req.body.zipurl) req.error = "Need at least 1 file or a zip file url.";
-    else if (config.maxImages && req.files && req.files.length > config.maxImages) req.error = `${req.files.length} images uploaded, but this node can only process up to ${config.maxImages}.`;
-    else if ((!req.files || req.files.length === 0) && req.body.zipurl) {
-        const srcPath = path.join("tmp", req.id);
-        fs.mkdirSync(srcPath);
-    }
-    next();
-}, taskNew.createTask);
+const taskNewHandlers = [
+    authCheck,
+    taskNew.assignUUID,
+    taskNew.uploadImages,
+    (req, res, next) => {
+        req.body = req.body || {};
+        if ((!req.files || req.files.length === 0) && !req.body.zipurl) req.error = "Need at least 1 file or a zip file url.";
+        else if (config.maxImages && req.files && req.files.length > config.maxImages) req.error = `${req.files.length} images uploaded, but this node can only process up to ${config.maxImages}.`;
+        else if ((!req.files || req.files.length === 0) && req.body.zipurl) {
+            const srcPath = path.join("tmp", req.id);
+            fs.mkdirSync(srcPath);
+        }
+        next();
+    },
+    taskNew.createTask
+];
+
+app.post('/task/new', ...taskNewHandlers);
+
+// Some ClusterODM deployments POST to the root path; treat it like /task/new.
+app.post('/', ...taskNewHandlers);
 
 let getTaskFromUuid = (req, res, next) => {
     let task = taskManager.find(req.params.uuid);
