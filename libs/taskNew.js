@@ -67,6 +67,88 @@ const assureUniqueFilename = (dstPath, filename, cb) => {
     });
 };
 
+const getImportPathField = (body = {}) => {
+    if (!body) return null;
+    return body.import_path || body.importPath || null;
+};
+
+const isAbsoluteRoot = (rootPath) => {
+    const parsed = path.parse(rootPath);
+    return parsed.root === rootPath;
+};
+
+const normalizeImportPath = (rawPath) => {
+    if (!rawPath) return { path: null };
+    const trimmed = String(rawPath).trim();
+    if (!trimmed) return { error: 'import_path cannot be empty.' };
+
+    const allowedRoots = (config.importPathRoots || [])
+        .filter(Boolean)
+        .map(root => path.resolve(root));
+
+    if (allowedRoots.length === 0) {
+        return { error: 'import_path support is not configured on this node.' };
+    }
+
+    const resolved = path.resolve(trimmed);
+    const withinAllowed = allowedRoots.some(root => {
+        if (isAbsoluteRoot(root)) {
+            return resolved.startsWith(root);
+        }
+        const normalizedRoot = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+        return resolved === root || resolved.startsWith(normalizedRoot);
+    });
+
+    if (!withinAllowed) {
+        return { error: `Import path ${resolved} is not allowed on this node.` };
+    }
+
+    try {
+        const stats = fs.statSync(resolved);
+        if (!stats.isDirectory()) {
+            return { error: `Import path ${resolved} must be a directory.` };
+        }
+    } catch (err) {
+        return { error: `Import path ${resolved} cannot be accessed (${err.message}).` };
+    }
+
+    return { path: resolved };
+};
+
+const IMAGE_REGEX = /\.(jpe?g|png|gif|bmp|tiff?)$/i;
+
+const estimateImagesInDir = (dirPath, cb) => {
+    fs.readdir(dirPath, (err, entries) => {
+        if (err) {
+            cb(err, 0);
+            return;
+        }
+        let count = 0;
+        entries.forEach(entry => {
+            if (IMAGE_REGEX.test(entry)) count++;
+        });
+        cb(null, count);
+    });
+};
+
+const copySupportFiles = (srcDir, dstDir, cb) => {
+    fs.readdir(srcDir, (err, entries) => {
+        if (err) return cb(err);
+
+        async.eachSeries(entries, (entry, done) => {
+            if (/\.txt$/gi.test(entry) || /^align\.(las|laz|tif)$/gi.test(entry)) {
+                const srcFile = path.join(srcDir, entry);
+                const dstFile = path.join(dstDir, entry);
+
+                fs.copyFile(srcFile, dstFile, err => {
+                    if (err && err.code !== 'EEXIST') return done(err);
+                    return done();
+                });
+            } else done();
+        }, cb);
+    });
+};
+
 const upload = multer({
     storage: multer.diskStorage({
         destination: (req, file, cb) => {
@@ -176,7 +258,8 @@ module.exports = {
                 req.body = body;
                 req.files = files;
 
-                if (req.files.length === 0){
+                const hasImportPath = !!getImportPathField(req.body);
+                if (req.files.length === 0 && !hasImportPath && !req.body.zipurl){
                     req.error = "Need at least 1 file.";
                 }
                 next();
@@ -226,12 +309,25 @@ module.exports = {
 
     createTask: (req, res) => {
         const srcPath = path.join("tmp", req.id);
+        const rawImportPath = getImportPathField(req.body);
 
         // Print error message and cleanup
         const die = (error) => {
             res.json({error});
             removeDirectory(srcPath);
         };
+        
+        let sharedImportPath = null;
+        if (rawImportPath) {
+            const result = normalizeImportPath(rawImportPath);
+            if (result.error) {
+                die(result.error);
+                return;
+            }
+            sharedImportPath = result.path;
+            logger.info(`Using import_path ${sharedImportPath} for task ${req.id}`);
+        }
+        const useSharedImport = Boolean(sharedImportPath);
         
         let destPath = path.join(Directories.data, req.id);
         let destImagesPath = path.join(destPath, "images");
@@ -248,7 +344,45 @@ module.exports = {
             }
         };
 
-        let initSteps = [
+        let initSteps;
+        if (useSharedImport) {
+            initSteps = [
+                cb => {
+                    fs.stat(destPath, (err) => {
+                        if (err && err.code === 'ENOENT') return cb();
+                        if (err) return cb(err);
+                        removeDirectory(destPath, err => {
+                            if (err) cb(new Error(`Directory exists and we couldn't remove it.`));
+                            else cb();
+                        });
+                    });
+                },
+                cb => fs.mkdir(destPath, undefined, err => {
+                    if (err && err.code !== 'EEXIST') cb(err);
+                    else cb();
+                }),
+                cb => fs.mkdir(destGcpPath, undefined, err => {
+                    if (err && err.code !== 'EEXIST') cb(err);
+                    else cb();
+                }),
+                cb => fs.symlink(sharedImportPath, destImagesPath, 'dir', err => {
+                    if (err && err.code === 'EEXIST') {
+                        fs.unlink(destImagesPath, unlinkErr => {
+                            if (unlinkErr) cb(unlinkErr);
+                            else fs.symlink(sharedImportPath, destImagesPath, 'dir', cb);
+                        });
+                    } else cb(err);
+                }),
+                cb => {
+                    checkMaxImageLimits(cb);
+                },
+                cb => copySupportFiles(sharedImportPath, destGcpPath, err => {
+                    if (err && err.code !== 'ENOENT') return cb(err);
+                    cb();
+                })
+            ];
+        } else {
+            initSteps = [
             // Check if dest directory already exists
             cb => {
                 if (req.files && req.files.length > 0) {
@@ -382,6 +516,7 @@ module.exports = {
                 });
             }
         ];
+        }
 
         if (req.error !== undefined){
             die(req.error);
@@ -391,6 +526,7 @@ module.exports = {
             async.series([
                 cb => {
                     // Basic path check
+                    if (useSharedImport) return cb();
                     fs.exists(srcPath, exists => {
                         if (exists) cb();
                         else cb(new Error(`Invalid UUID`));
@@ -406,8 +542,9 @@ module.exports = {
                     });
                 },
                 cb => {
-                    fs.readdir(srcPath, (err, entries) => {
-                        if (!err) imagesCountEstimate = entries.length;
+                    const targetDir = useSharedImport ? sharedImportPath : srcPath;
+                    estimateImagesInDir(targetDir, (err, count) => {
+                        if (!err) imagesCountEstimate = count;
                         cb();
                     });
                 },

@@ -113,6 +113,22 @@ docker run -p 3000:3000 -v /mnt/external_hd:/var/www/data opendronemap/nodeodm
 
 This can be also used to access the computation results directly from the file system.
 
+## Processing Tasks From Shared Storage
+
+Some deployments (for example, WebODM + ClusterODM on HPC systems) have the images staged on a shared filesystem that is mounted under different absolute paths on each node. To avoid uploading those images over HTTP, NodeODM can now accept an `import_path` form field pointing at the existing directory.
+
+For security, shared-path processing is disabled unless you configure one or more allowed roots via `importPathRoots` in `config-default.json` (or any config file passed via `--config`). Example:
+
+```json
+{
+  "importPathRoots": ["/corral-repl/tacc/aci/PT2050/projects/PTDATAX-263/webodm/media"]
+}
+```
+
+You can also set the `NODEODM_IMPORT_PATH_ROOTS` environment variable (use your OS path delimiter such as `:` on Linux/macOS or `;` on Windows) to configure the roots without editing the JSON file.
+
+When a client POSTs `/task/new` with `import_path=/corral-repl/.../project/123`, NodeODM will validate that the requested directory resides under one of the allowed roots, symlink it into the task working directory, and copy any `gcp_list.txt` / `align.*` files into the task’s `gcp/` folder. The original dataset is left untouched and NodeODM processes the files in place.
+
 ## Using GPU Acceleration
 
 Since ODM has support [for GPU acceleration](https://github.com/OpenDroneMap/ODM#gpu-acceleration) you can use another base image for GPU processing. You need to use the `opendronemap/nodeodm:gpu` docker image instead of `opendronemap/nodeodm` and you need to pass the `--gpus all` flag:

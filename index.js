@@ -288,9 +288,13 @@ const taskNewHandlers = [
     taskNew.uploadImages,
     (req, res, next) => {
         req.body = req.body || {};
-        if ((!req.files || req.files.length === 0) && !req.body.zipurl) req.error = "Need at least 1 file or a zip file url.";
-        else if (config.maxImages && req.files && req.files.length > config.maxImages) req.error = `${req.files.length} images uploaded, but this node can only process up to ${config.maxImages}.`;
-        else if ((!req.files || req.files.length === 0) && req.body.zipurl) {
+        const hasFiles = req.files && req.files.length > 0;
+        const hasZip = !!req.body.zipurl;
+        const hasImportPath = !!(req.body.import_path || req.body.importPath);
+
+        if (!hasFiles && !hasZip && !hasImportPath) req.error = "Need at least 1 file, a zip file url, or an import_path.";
+        else if (config.maxImages && hasFiles && req.files.length > config.maxImages) req.error = `${req.files.length} images uploaded, but this node can only process up to ${config.maxImages}.`;
+        else if (!hasFiles && hasZip) {
             const srcPath = path.join("tmp", req.id);
             fs.mkdirSync(srcPath);
         }

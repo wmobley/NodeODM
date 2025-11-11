@@ -18,5 +18,6 @@
 	"testSkipDems": false,
 	"token": "",
 	"authorizedIps": [],
-	"maxImages": ""
+	"maxImages": "",
+	"importPathRoots": []
 }
