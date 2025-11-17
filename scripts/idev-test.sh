@@ -1,79 +1,37 @@
 #!/usr/bin/env bash
-# Quick idev test runner for NodeODM with Apptainer
+# Minimal idev runner (no wrapping/tailing)
 set -euo pipefail
-# Avoid bash-completion nounset issues on LS6
-BASH_COMPLETION_DEBUG=${BASH_COMPLETION_DEBUG:-}
-# module load may source bash-completion; disable nounset just for that call
-set +u
-module load tacc-apptainer
-set -u
-# Optional: turn on shell trace for debugging (DEBUG=1)
-[ "${DEBUG:-0}" = "1" ] && set -x
-# Defaults (can be overridden via env)
-BASE=${BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+
+JOBDIR=${JOBDIR:-/scratch/06659/wmobley/nodeodm/nodeodm-ls6}
+WORK_DIR=${WORK_DIR:-$(ls -d "$JOBDIR"/nodeodm_workdir_*admin* 2>/dev/null | head -n1)}
+NODEODM_RUNTIME_DIR=${NODEODM_RUNTIME_DIR:-"$WORK_DIR/runtime"}
 IMAGE=${NODEODM_IMAGE:-ghcr.io/wmobley/nodeodm:latest}
-USE_OVERLAY=${USE_OVERLAY:-1}          # 1=use local nodeodm-source overlay, 0=image code only
-PORT=${PORT:-3001}
-LOG_LEVEL=${NODEODM_LOG_LEVEL:-silly}
 
-# GHCR creds if image is private:
-# export APPTAINER_DOCKER_USERNAME=wmobley
-# export APPTAINER_DOCKER_PASSWORD=<PAT with read:packages>
-
-WORK_DIR=$(mktemp -d /tmp/nodeodm-idev-XXXX)
-RUNTIME="$WORK_DIR/runtime"
-mkdir -p "$RUNTIME"
-
-if [ "$USE_OVERLAY" -eq 1 ]; then
-    if [ ! -f "$BASE/index.js" ]; then
-        echo "nodeodm-source missing at $BASE (expected index.js); set BASE=... or set USE_OVERLAY=0" >&2
-        exit 1
-    fi
-    rsync -a "$BASE"/ "$RUNTIME"/
-    BIND_ARGS="--bind $RUNTIME:/var/www:rw"
-else
-    mkdir -p "$RUNTIME"/{data,tmp,logs}
-    BIND_ARGS="--bind $RUNTIME/data:/var/www/data:rw --bind $RUNTIME/tmp:/var/www/tmp:rw --bind $RUNTIME/logs:/var/www/logs:rw"
+if [ -z "${WORK_DIR:-}" ] || [ ! -f "$WORK_DIR/nodeodm-config.json" ]; then
+  echo "WORK_DIR/nodeodm-config.json not found. Set WORK_DIR or run the job once to create it." >&2
+  exit 1
 fi
 
-cat > "$WORK_DIR/nodeodm-config.json" <<EOF
-{
-  "port": $PORT,
-  "timeout": 0,
-  "maxConcurrency": 4,
-  "maxImages": 0,
-  "cleanupTasksAfter": 2880,
-  "token": "",
-  "parallelQueueProcessing": 1,
-  "maxParallelTasks": 4,
-  "odm_path": "/code",
-  "logger": { "level": "$LOG_LEVEL", "logDirectory": "/var/www/logs" }
-}
-EOF
-
-LOG="$WORK_DIR/nodeodm.startup.log"
-
-echo "Working dir: $WORK_DIR"
-echo "Image: $IMAGE"
-echo "Overlay source: $USE_OVERLAY (BASE=$BASE)"
-
+SKIP_TAP_SETUP=1 NODEODM_USE_IMAGE_SOURCE=0 NODEODM_LOG_LEVEL=silly \
 apptainer exec \
   --writable-tmpfs \
   --bind "$WORK_DIR/nodeodm-config.json":/tmp/nodeodm-config.json \
-  $BIND_ARGS \
-  docker://$IMAGE \
+  --bind "$NODEODM_RUNTIME_DIR":/var/www:rw \
+  docker://"$IMAGE" \
   sh -xc '
+    set -x
     NODE_BIN=$(command -v node || command -v nodejs || find /usr/local/nvm -type f -path "*bin/node" 2>/dev/null | head -n1)
     [ -z "$NODE_BIN" ] && [ -x /usr/local/bin/node.sh ] && NODE_BIN=/usr/local/bin/node.sh
     PATH=$(dirname "$NODE_BIN"):$PATH; export PATH
-    echo "Using node:" $(node -v); echo "npm:" $(npm -v)
+    if command -v pip >/dev/null 2>&1; then
+      pip install --no-cache-dir python-dateutil repoze.lru psutil vmem || true
+    elif command -v pip3 >/dev/null 2>&1; then
+      pip3 install --no-cache-dir python-dateutil repoze.lru psutil vmem || true
+    fi
+    node -v; npm -v
     cd /var/www && mkdir -p tmp data logs && \
       if [ ! -d node_modules ] || [ ! -f node_modules/winston/package.json ]; then
-        echo "Installing NodeODM dependencies (npm install --production)..."
         npm install --production || exit 1
-      fi && \
-      exec "$NODE_BIN" index.js --config /tmp/nodeodm-config.json --log_level '"$LOG_LEVEL"'
-  ' > "$LOG" 2>&1 &
-
-echo "Tailing log: $LOG"
-tail -f "$LOG"
+      fi
+    exec "$NODE_BIN" index.js --config /tmp/nodeodm-config.json --log_level silly
+  '
