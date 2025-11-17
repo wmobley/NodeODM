@@ -129,6 +129,8 @@ You can also set the `NODEODM_IMPORT_PATH_ROOTS` environment variable (use your 
 
 When a client POSTs `/task/new` with `import_path=/corral-repl/.../project/123`, NodeODM will validate that the requested directory resides under one of the allowed roots, symlink it into the task working directory, and copy any `gcp_list.txt` / `align.*` files into the task’s `gcp/` folder. The original dataset is left untouched and NodeODM processes the files in place.
 
+If an `import_path` is provided but the path cannot be used (for example, it falls outside the allowed roots) and the request also contains uploaded images or a `zipurl`, NodeODM automatically falls back to the uploaded data so traditional workflows continue to work on nodes that also support shared-path processing.
+
 ## Using GPU Acceleration
 
 Since ODM has support [for GPU acceleration](https://github.com/OpenDroneMap/ODM#gpu-acceleration) you can use another base image for GPU processing. You need to use the `opendronemap/nodeodm:gpu` docker image instead of `opendronemap/nodeodm` and you need to pass the `--gpus all` flag:

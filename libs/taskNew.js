@@ -149,6 +149,25 @@ const copySupportFiles = (srcDir, dstDir, cb) => {
     });
 };
 
+const preserveSeedZipEnv = process.env.NODEODM_PRESERVE_SEED_ZIP;
+const shouldPreserveSeedZips = !!preserveSeedZipEnv &&
+    preserveSeedZipEnv !== '0' &&
+    preserveSeedZipEnv.toLowerCase() !== 'false';
+
+function logSeedExtractionSummary(projectPath, uuid) {
+    fs.readdir(projectPath, (err, entries) => {
+        if (err) {
+            logger.warn(`[SEED DEBUG] Unable to list ${projectPath} after extracting seed for ${uuid}: ${err.message}`);
+            return;
+        }
+        const preview = entries.slice(0, 15).join(', ');
+        logger.info(`[SEED DEBUG] Seed extraction for ${uuid} produced ${entries.length} top-level entries${preview ? `: ${preview}` : ''}`);
+        if (!entries.length) {
+            logger.warn(`[SEED DEBUG] Seed extraction for ${uuid} appears empty; investigate seed.zip contents or upload path.`);
+        }
+    });
+}
+
 const upload = multer({
     storage: multer.diskStorage({
         destination: (req, file, cb) => {
@@ -310,6 +329,8 @@ module.exports = {
     createTask: (req, res) => {
         const srcPath = path.join("tmp", req.id);
         const rawImportPath = getImportPathField(req.body);
+        const hasUploadedFiles = Array.isArray(req.files) && req.files.length > 0;
+        const hasZipUrl = !!req.body.zipurl;
 
         // Print error message and cleanup
         const die = (error) => {
@@ -318,16 +339,22 @@ module.exports = {
         };
         
         let sharedImportPath = null;
+        let useSharedImport = false;
         if (rawImportPath) {
             const result = normalizeImportPath(rawImportPath);
             if (result.error) {
-                die(result.error);
-                return;
+                if (hasUploadedFiles || hasZipUrl) {
+                    logger.warn(`Import path ${rawImportPath} rejected (${result.error}); falling back to uploaded data for task ${req.id}`);
+                } else {
+                    die(result.error);
+                    return;
+                }
+            } else {
+                sharedImportPath = result.path;
+                useSharedImport = true;
+                logger.info(`Using import_path ${sharedImportPath} for task ${req.id}`);
             }
-            sharedImportPath = result.path;
-            logger.info(`Using import_path ${sharedImportPath} for task ${req.id}`);
         }
-        const useSharedImport = Boolean(sharedImportPath);
         
         let destPath = path.join(Directories.data, req.id);
         let destImagesPath = path.join(destPath, "images");
@@ -423,8 +450,24 @@ module.exports = {
             },
             
             // Move all uploads to data/<uuid>/images dir (if any)
-            cb => fs.mkdir(destPath, undefined, cb),
-            cb => fs.mkdir(destGcpPath, undefined, cb),
+            cb => fs.mkdir(destPath, undefined, err => {
+                if (!err) {
+                    logger.info(`[SEED DEBUG] Created project directory ${destPath}`);
+                } else if (err.code === 'EEXIST') {
+                    logger.info(`[SEED DEBUG] Project directory ${destPath} already exists`);
+                    err = null;
+                }
+                cb(err);
+            }),
+            cb => fs.mkdir(destGcpPath, undefined, err => {
+                if (!err) {
+                    logger.info(`[SEED DEBUG] Created gcp directory ${destGcpPath}`);
+                } else if (err.code === 'EEXIST') {
+                    logger.info(`[SEED DEBUG] GCP directory ${destGcpPath} already exists`);
+                    err = null;
+                }
+                cb(err);
+            }),
             cb => {
                 // We attempt to do this multiple times,
                 // as antivirus software sometimes is scanning
@@ -433,6 +476,7 @@ module.exports = {
                 let retries = 0;
 
                 const move = () => {
+                    logger.info(`[SEED DEBUG] Moving uploads from ${srcPath} to ${destImagesPath}`);
                     mv(srcPath, destImagesPath, err => {
                         if (!err) cb(); // Done
                         else{
@@ -451,21 +495,51 @@ module.exports = {
             // Zip files handling
             cb => {
                 const handleSeed = (cb) => {
+                    logger.info(`[SEED DEBUG] Entering seed handler for task ${req.id} (project ${destPath})`);
                     const seedFileDst = path.join(destPath, "seed.zip");
+                    const seedSource = path.join(destImagesPath, "seed.zip");
 
                     async.series([
                         // Move to project root
-                        cb => mv(path.join(destImagesPath, "seed.zip"), seedFileDst, cb),
+                        cb => {
+                            logger.info(`[SEED DEBUG] Moving seed archive from ${seedSource} to ${seedFileDst}`);
+                            mv(seedSource, seedFileDst, cb);
+                        },
+
+                        // Optionally keep a copy for debugging
+                        cb => {
+                            if (!shouldPreserveSeedZips) return cb();
+                            const debugCopyPath = path.join(destPath, `seed-${req.id}.zip`);
+                            fs.copyFile(seedFileDst, debugCopyPath, err => {
+                                if (err) {
+                                    logger.warn(`[SEED DEBUG] Failed to copy seed.zip for ${req.id}: ${err.message}`);
+                                } else {
+                                    logger.info(`[SEED DEBUG] Preserved seed archive at ${debugCopyPath}`);
+                                }
+                                cb();
+                            });
+                        },
                         
                         // Extract
                         cb => {
-                            ziputils.unzip(seedFileDst, destPath, cb);
+                            logger.info(`[SEED DEBUG] Unzipping ${seedFileDst} for task ${req.id} into ${destPath}`);
+                            ziputils.unzip(seedFileDst, destPath, err => {
+                                if (err) {
+                                    logger.warn(`[SEED DEBUG] unzip failed for ${req.id}: ${err.message}`);
+                                } else {
+                                    logSeedExtractionSummary(destPath, req.id);
+                                }
+                                cb(err);
+                            });
                         },
 
                         // Remove
                         cb => {
                             fs.exists(seedFileDst, exists => {
-                                if (exists) fs.unlink(seedFileDst, cb);
+                                if (exists) {
+                                    logger.info(`[SEED DEBUG] Removing temporary seed archive ${seedFileDst}`);
+                                    fs.unlink(seedFileDst, cb);
+                                }
                                 else cb();
                             });
                         }
@@ -485,8 +559,10 @@ module.exports = {
                     else {
                         async.eachSeries(entries, (entry, cb) => {
                             if (entry === "seed.zip"){
+                                logger.info(`[SEED DEBUG] Found seed.zip in ${destImagesPath}`);
                                 handleSeed(cb);
                             }else if (entry === "zipurl.zip") {
+                                logger.info(`[SEED DEBUG] Found zipurl.zip in ${destImagesPath}`);
                                 handleZipUrl(cb);
                             } else cb();
                         }, cb);
