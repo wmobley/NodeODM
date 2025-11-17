@@ -18,24 +18,32 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 import sys
-import imp
 import argparse
 import json
 import os
+import importlib.util
+
+
+def _load_module_from_path(name, path):
+    """Load a module from a given file path using importlib (replaces deprecated imp)."""
+    if not os.path.isfile(path):
+        return None
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 dest_file = os.environ.get("ODM_OPTIONS_TMP_FILE")
 
 sys.path.append(sys.argv[2])
 
-try:
-    imp.load_source('opendm', sys.argv[2] + '/opendm/__init__.py')
-except:
-    pass
-try:
-    imp.load_source('context', sys.argv[2] + '/opendm/context.py')
-except:
-    pass
-odm = imp.load_source('config', sys.argv[2] + '/opendm/config.py')
+_load_module_from_path('opendm', os.path.join(sys.argv[2], 'opendm', '__init__.py'))
+_load_module_from_path('context', os.path.join(sys.argv[2], 'opendm', 'context.py'))
+odm = _load_module_from_path('config', os.path.join(sys.argv[2], 'opendm', 'config.py'))
+if odm is None:
+    raise ImportError("Unable to load opendm/config.py")
 
 options = {}
 class ArgumentParserStub(argparse.ArgumentParser):
