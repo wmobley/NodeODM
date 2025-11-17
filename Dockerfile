@@ -5,7 +5,7 @@ EXPOSE 3000
 
 USER root
 RUN apt-get update && \
-    apt-get install -y curl gpg-agent ca-certificates nodejs npm unzip p7zip-full && \
+    apt-get install -y curl gpg-agent ca-certificates nodejs npm unzip p7zip-full python3-dateutil && \
     npm install -g nodemon && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
     ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
