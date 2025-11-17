@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Quick idev test runner for NodeODM with Apptainer
 set -euo pipefail
-module load tacc-apptainer
 # Avoid bash-completion nounset issues on LS6
 BASH_COMPLETION_DEBUG=${BASH_COMPLETION_DEBUG:-}
+# module load may source bash-completion; disable nounset just for that call
+set +u
+module load tacc-apptainer
+set -u
+# Optional: turn on shell trace for debugging (DEBUG=1)
+[ "${DEBUG:-0}" = "1" ] && set -x
 # Defaults (can be overridden via env)
 BASE=${BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 IMAGE=${NODEODM_IMAGE:-ghcr.io/wmobley/nodeodm:latest}
