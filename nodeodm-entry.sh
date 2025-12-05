@@ -18,4 +18,11 @@ head -n 40 /var/www/index.js || true
 
 echo "[ENTRY] incoming args: $*"
 
-exec node /var/www/index.js "$@"
+# Always execute from /var/www so relative paths (package.json) resolve
+cd /var/www || {
+  echo "[ENTRY] ERROR: failed to cd /var/www"
+  exit 1
+}
+echo "[ENTRY] pwd: $(pwd)"
+
+exec node index.js "$@"
