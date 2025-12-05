@@ -21,4 +21,7 @@ COPY . /var/www
 
 RUN npm install --production && mkdir -p tmp
 
-ENTRYPOINT ["/usr/bin/node", "/var/www/index.js"]
+COPY nodeodm-entry.sh /usr/local/bin/nodeodm-entry.sh
+RUN chmod +x /usr/local/bin/nodeodm-entry.sh
+
+ENTRYPOINT ["/usr/local/bin/nodeodm-entry.sh"]

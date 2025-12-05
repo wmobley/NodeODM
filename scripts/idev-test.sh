@@ -20,13 +20,19 @@ apptainer exec \
   docker://"$IMAGE" \
   sh -xc '
     set -x
+    export PIP_BREAK_SYSTEM_PACKAGES=1
     NODE_BIN=$(command -v node || command -v nodejs || find /usr/local/nvm -type f -path "*bin/node" 2>/dev/null | head -n1)
     [ -z "$NODE_BIN" ] && [ -x /usr/local/bin/node.sh ] && NODE_BIN=/usr/local/bin/node.sh
     PATH=$(dirname "$NODE_BIN"):$PATH; export PATH
+    # Ensure Python deps (vmem and friends) via any available pip
     if command -v pip >/dev/null 2>&1; then
       pip install --no-cache-dir python-dateutil repoze.lru psutil vmem || true
     elif command -v pip3 >/dev/null 2>&1; then
       pip3 install --no-cache-dir python-dateutil repoze.lru psutil vmem || true
+    elif command -v python3 >/dev/null 2>&1; then
+      python3 -m pip install --no-cache-dir python-dateutil repoze.lru psutil vmem || true
+    else
+      echo "pip not found; skipping Python dep install"
     fi
     node -v; npm -v
     cd /var/www && mkdir -p tmp data logs && \
