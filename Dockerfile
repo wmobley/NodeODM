@@ -16,7 +16,7 @@ ENV NODE_VERSION 14
 # Install Python helpers needed in our environment, then run upstream install script (nvm + npm deps)
 RUN apt-get update && \
     apt-get install -y ca-certificates python3-dateutil python3-repoze.lru python3-psutil python3-pip && \
-    python3 -m pip install --no-cache-dir vmem && \
+    python3 -m pip install --no-cache-dir vmem --upgrade exifread && \
     bash install_deps.sh && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
     ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
