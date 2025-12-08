@@ -35,6 +35,7 @@ def _load_module_from_path(name, path):
     spec.loader.exec_module(module)
     return module
 
+
 dest_file = os.environ.get("ODM_OPTIONS_TMP_FILE")
 
 sys.path.append(sys.argv[2])
@@ -47,14 +48,15 @@ if odm is None:
 
 options = {}
 class ArgumentParserStub(argparse.ArgumentParser):
-	def add_argument(self, *args, **kwargs):
-		argparse.ArgumentParser.add_argument(self, *args, **kwargs)
-		options[args[0]] = {}
-		for name, value in kwargs.items():
-			options[args[0]][str(name)] = str(value)
-	
-	def add_mutually_exclusive_group(self):
-		return ArgumentParserStub()
+    def add_argument(self, *args, **kwargs):
+        argparse.ArgumentParser.add_argument(self, *args, **kwargs)
+        options[args[0]] = {}
+        for name, value in kwargs.items():
+            options[args[0]][str(name)] = str(value)
+    
+    def add_mutually_exclusive_group(self):
+        return ArgumentParserStub()
+
 
 if not hasattr(odm, 'parser'):
     # ODM >= 2.0

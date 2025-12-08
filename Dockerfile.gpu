@@ -4,14 +4,19 @@ LABEL maintainer="Piero Toffanin <pt@masseranolabs.com>"
 EXPOSE 3000
 
 USER root
+
+ENV NVM_DIR /usr/local/nvm
+ENV NODE_VERSION 14
+
+# Install Python helpers needed in our environment, then run upstream install script (nvm + npm deps)
 RUN apt-get update && \
-    apt-get install -y curl gpg-agent ca-certificates nodejs npm unzip p7zip-full \
-        python3-dateutil python3-repoze.lru python3-psutil python3-pip && \
+    apt-get install -y ca-certificates python3-dateutil python3-repoze.lru python3-psutil python3-pip && \
     python3 -m pip install --no-cache-dir vmem && \
-    npm install -g nodemon && \
+    bash install_deps.sh && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
     ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
-    ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal
+    ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal && \
+    ln -s /var/www/node.sh /usr/bin/node
 
 RUN echo /usr/local/cuda-11.2/compat >> /etc/ld.so.conf.d/989_cuda-11.conf && ldconfig
 
@@ -21,7 +26,7 @@ WORKDIR "/var/www"
 RUN useradd -m -d "/home/odm" -s /bin/bash odm
 COPY --chown=odm:odm . /var/www
 
-RUN npm install --production && mkdir -p tmp
+RUN npm install --production && mkdir -p tmp && node index.js --powercycle
 
 RUN chown -R odm:odm /var/www
 RUN chown -R odm:odm /code
