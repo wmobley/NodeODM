@@ -17,11 +17,26 @@ ENV NODE_VERSION 14
 RUN apt-get update && \
     apt-get install -y ca-certificates python3-dateutil python3-repoze.lru python3-psutil python3-pip && \
     python3 -m pip install --no-cache-dir vmem --upgrade exifread && \
+    python3 - <<'PY' && \
     bash install_deps.sh && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
     ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
     ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal && \
     ln -s /var/www/node.sh /usr/bin/node && \
     mkdir -p tmp && node index.js --powercycle
+from pathlib import Path
+path = Path("/code/venv/lib/python3.12/site-packages/exifread/core/exif_header.py")
+text = path.read_text()
+if "PATCH_EMPTY_VALUES" not in text:
+    marker = "printable = str(values[0])"
+    patched = marker.replace("printable = str(values[0])",
+"""if not values:
+                return "", prefer_printable
+            printable = str(values[0])""")
+    if marker in text:
+        text = text.replace(marker, patched, 1)
+        text += "\n# PATCH_EMPTY_VALUES\n"
+        path.write_text(text)
+PY
 
 ENTRYPOINT ["/usr/bin/node", "/var/www/index.js"]
