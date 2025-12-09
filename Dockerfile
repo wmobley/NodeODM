@@ -1,4 +1,5 @@
-FROM opendronemap/odm:latest
+ARG BASE_ODM_IMAGE=opendronemap/odm:latest
+FROM ${BASE_ODM_IMAGE}
 LABEL maintainer="Piero Toffanin <pt@masseranolabs.com>"
 
 EXPOSE 3000

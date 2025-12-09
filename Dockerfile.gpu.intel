@@ -1,4 +1,5 @@
-FROM opendronemap/nodeodm:gpu
+ARG BASE_NODEODM_GPU_IMAGE=opendronemap/nodeodm:gpu
+FROM ${BASE_NODEODM_GPU_IMAGE}
 
 EXPOSE 3000
 
