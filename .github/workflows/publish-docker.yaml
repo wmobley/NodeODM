@@ -11,6 +11,43 @@ on:
   workflow_dispatch:
 
 jobs:
+  odm-base:
+    name: Build/push ODM base (latest)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      ODM_IMAGE: ghcr.io/${{ github.repository_owner }}/odm:latest
+    steps:
+    - name: Checkout ODM
+      uses: actions/checkout@v4
+      with:
+        repository: wmobley/ODM
+        path: odm-src
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        buildkitd-config-inline: |
+          [worker.oci]
+            max-parallelism = 1
+    - name: Login to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build/push ODM base image
+      uses: docker/build-push-action@v5
+      with:
+        context: odm-src
+        file: odm-src/portable.Dockerfile
+        platforms: linux/amd64
+        push: true
+        cache-from: type=registry,ref=${{ env.ODM_IMAGE }}-buildcache
+        cache-to: type=registry,ref=${{ env.ODM_IMAGE }}-buildcache,mode=max
+        tags: ${{ env.ODM_IMAGE }}
+
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -19,13 +56,16 @@ jobs:
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nodeodm
       BASE_ODM_IMAGE: ghcr.io/${{ github.repository_owner }}/odm:latest
+    needs: odm-base
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        buildkitd-config-inline: |
+          [worker.oci]
+            max-parallelism = 1
     - name: Login to GHCR
       uses: docker/login-action@v3
       with:
@@ -45,8 +85,10 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         file: ./Dockerfile
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
+        cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
         build-args: |
           BASE_ODM_IMAGE=${{ env.BASE_ODM_IMAGE }}
         tags: |
