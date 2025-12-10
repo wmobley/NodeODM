@@ -1,7 +1,4 @@
 name: Publish Docker
-env:
-  GHCR_OWNER: ${{ vars.GHCR_OWNER || github.repository_owner }}
-  GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
 on:
   push:
@@ -21,7 +18,9 @@ jobs:
       contents: read
       packages: write
     env:
-      ODM_IMAGE: ghcr.io/${{ env.GHCR_OWNER }}/odm:latest
+      OWNER: wmobley
+      ODM_IMAGE: ghcr.io/wmobley/odm:latest
+      GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
     steps:
     - name: Checkout ODM
       uses: actions/checkout@v4
@@ -38,7 +37,7 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
-        username: ${{ env.GHCR_OWNER }}
+        username: ${{ env.OWNER }}
         password: ${{ env.GHCR_TOKEN }}
     - name: Build/push ODM base image
       uses: docker/build-push-action@v5
@@ -57,8 +56,10 @@ jobs:
       contents: read
       packages: write
     env:
-      IMAGE_NAME: ghcr.io/${{ env.GHCR_OWNER }}/nodeodm
-      BASE_ODM_IMAGE: ghcr.io/${{ env.GHCR_OWNER }}/odm:latest
+      OWNER: wmobley
+      IMAGE_NAME: ghcr.io/wmobley/nodeodm
+      BASE_ODM_IMAGE: ghcr.io/wmobley/odm:latest
+      GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
     needs: odm-base
     steps:
     - name: Checkout
@@ -73,7 +74,7 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
-        username: ${{ env.GHCR_OWNER }}
+        username: ${{ env.OWNER }}
         password: ${{ env.GHCR_TOKEN }}
     # Use the repository information of the checked-out code to format docker tags
     - name: Docker meta

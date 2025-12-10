@@ -1,7 +1,4 @@
 name: Publish Docker Intel GPU
-env:
-  GHCR_OWNER: ${{ vars.GHCR_OWNER || github.repository_owner }}
-  GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
 on:
   push:
@@ -20,8 +17,10 @@ jobs:
       contents: read
       packages: write
     env:
-      IMAGE_NAME: ghcr.io/${{ env.GHCR_OWNER }}/nodeodm
-      BASE_NODEODM_GPU_IMAGE: ghcr.io/${{ env.GHCR_OWNER }}/nodeodm:gpu
+      OWNER: wmobley
+      IMAGE_NAME: ghcr.io/wmobley/nodeodm
+      BASE_NODEODM_GPU_IMAGE: ghcr.io/wmobley/nodeodm:gpu
+      GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -35,7 +34,7 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
-        username: ${{ env.GHCR_OWNER }}
+        username: ${{ env.OWNER }}
         password: ${{ env.GHCR_TOKEN }}
     # Use the repository information of the checked-out code to format docker tags
     - name: Docker meta
