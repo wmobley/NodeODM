@@ -19,7 +19,7 @@ jobs:
     env:
       OWNER: wmobley
       IMAGE_NAME: ghcr.io/wmobley/nodeodm
-      BASE_ODM_IMAGE: opendronemap/odm:gpu
+      BASE_ODM_IMAGE: ghcr.io/wmobley/odm:gpu
       GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
     steps:
     - name: Checkout
