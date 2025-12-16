@@ -35,7 +35,7 @@ Options:
 	--log_level <logLevel>	Set log level verbosity (default: info)
 	-d, --daemon 	Set process to run as a deamon
 	-q, --parallel_queue_processing <number> Number of simultaneous processing tasks (default: 2)
-	--cleanup_tasks_after <number> Number of minutes that elapse before deleting finished and canceled tasks (default: 2880) 
+	--cleanup_tasks_after <number> Number of minutes that elapse before deleting finished and canceled tasks (default: 2880, <=0 disables cleanup) 
 	--cleanup_uploads_after <number> Number of minutes that elapse before deleting unfinished uploads. Set this value to the maximum time you expect a dataset to be uploaded. (default: 2880) 
 	--test Enable test mode. In test mode, no commands are sent to ODM. This can be useful during development or testing (default: false)
 	--test_skip_orthophotos	If test mode is enabled, skip orthophoto results when generating assets. (default: false) 

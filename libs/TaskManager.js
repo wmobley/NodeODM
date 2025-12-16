@@ -30,7 +30,9 @@ const Directories = require('./Directories');
 const ProgressReceiver = require('./ProgressReceiver');
 
 const TASKS_DUMP_FILE = path.join(Directories.data, "tasks.json");
-const CLEANUP_TASKS_IF_OLDER_THAN = 1000 * 60 * config.cleanupTasksAfter; // minutes
+// Disable cleanup when cleanupTasksAfter is 0 or negative
+const CLEANUP_TASKS_IF_OLDER_THAN = config.cleanupTasksAfter > 0 ?
+    1000 * 60 * config.cleanupTasksAfter : null; // minutes
 const CLEANUP_STALE_UPLOADS_AFTER = 1000 * 60 * config.cleanupUploadsAfter; // minutes
 
 let taskManager;
@@ -82,6 +84,12 @@ class TaskManager{
     // Removes old tasks that have either failed, are completed, or
     // have been canceled.
     removeOldTasks(done){
+        if (!CLEANUP_TASKS_IF_OLDER_THAN){
+            logger.debug("Task cleanup disabled; skipping check for old tasks.");
+            if (done) done();
+            return;
+        }
+
         let list = [];
         let now = new Date().getTime();
         logger.debug("Checking for old tasks to be removed...");
