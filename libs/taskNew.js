@@ -642,8 +642,10 @@ module.exports = {
                     task.initialize(err => {
                         if (err) {
                             // Cleanup
+                            logger.error(`Task initialization failed for ${req.id}: ${err.message}`);
+                            if (err.stack) logger.error(err.stack);
                             removeDirectory(srcPath);
-                            removeDirectory(destPath);
+                            logger.warn(`Task initialization failed for ${req.id}; preserving ${destPath} for debugging.`);
                         } else TaskManager.singleton().processNextTask();
                     }, initSteps);
                 }

@@ -166,13 +166,15 @@ class TaskManager{
             let task = this.findNextTaskToProcess();
             if (task){
                 this.addToRunningQueue(task);
-                task.start(() => {
+                const started = task.start(() => {
 
                     task.callWebhooks();
 
                     this.removeFromRunningQueue(task);
+                    this.dumpTaskList();
                     this.processNextTask();
                 });
+                if (started) this.dumpTaskList();
 
                 if (this.runningQueue.length < config.parallelQueueProcessing) this.processNextTask();
             }
@@ -195,6 +197,7 @@ class TaskManager{
         assert(task.constructor.name === "Task", "Must be a Task object");
         this.tasks[task.uuid] = task;
 
+        this.dumpTaskList();
         this.processNextTask();
     }
 
@@ -206,6 +209,7 @@ class TaskManager{
             if (!task.isCanceled()){
                 task.cancel(err => {
                     this.removeFromRunningQueue(task);
+                    this.dumpTaskList();
                     this.processNextTask();
                     cb(err);
                 });
@@ -230,7 +234,10 @@ class TaskManager{
         let task = this.find(uuid, cb);
         if (task){
             task.restart(options, err => {
-                if (!err) this.processNextTask();
+                if (!err){
+                    this.dumpTaskList();
+                    this.processNextTask();
+                }
                 cb(err);
             });
         }
