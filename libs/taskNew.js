@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const multer = require('multer');
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const TaskManager = require('./TaskManager');
 const uuidv4 = require('uuid/v4');
@@ -167,6 +168,24 @@ function logSeedExtractionSummary(projectPath, uuid) {
         }
     });
 }
+
+const hashFileSha256 = (filePath) => new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+});
+
+const logSeedZipDiagnostics = async (seedPath, uuid) => {
+    try {
+        const stats = await fs.promises.stat(seedPath);
+        const sha = await hashFileSha256(seedPath);
+        logger.info(`[SEED DEBUG] Seed zip diagnostics for ${uuid}: path=${seedPath}, size=${stats.size}, sha256=${sha}`);
+    } catch (err) {
+        logger.warn(`[SEED DEBUG] Seed zip diagnostics failed for ${uuid} (${seedPath}): ${err.message}`);
+    }
+};
 
 const upload = multer({
     storage: multer.diskStorage({
@@ -500,6 +519,12 @@ module.exports = {
                     const seedSource = path.join(destImagesPath, "seed.zip");
 
                     async.series([
+                        // Log seed zip size/hash before moving it
+                        cb => {
+                            logSeedZipDiagnostics(seedSource, req.id)
+                                .then(() => cb())
+                                .catch(() => cb());
+                        },
                         // Move to project root
                         cb => {
                             logger.info(`[SEED DEBUG] Moving seed archive from ${seedSource} to ${seedFileDst}`);
