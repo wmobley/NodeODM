@@ -622,7 +622,7 @@ app.post('/task/cancel', urlEncodedBodyParser, jsonBodyParser, authCheck, uuidCh
  *            $ref: "#/definitions/Response"
  */
 app.post('/task/remove', urlEncodedBodyParser, jsonBodyParser, authCheck, uuidCheck, (req, res) => {
-    taskManager.remove(req.body.uuid, successHandler(res));
+    res.json({ success: true, message: "Task removal disabled in this build." });
 });
 
 /** @swagger

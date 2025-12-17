@@ -594,6 +594,18 @@ module.exports = class Task{
                                         errorMessage = `Processing failed (${code})`;
                                         break;
                                 }
+                                const outputTail = this.output.slice(-25);
+                                let detailLines = outputTail.filter(line => /error|exception|traceback|fatal/i.test(line));
+                                if (detailLines.length === 0) {
+                                    detailLines = outputTail.slice(-5);
+                                }
+                                let detail = detailLines.join(" | ").replace(/\s+/g, " ").trim();
+                                if (detail.length > 500) {
+                                    detail = `${detail.slice(0, 500)}...`;
+                                }
+                                if (detail) {
+                                    errorMessage = `${errorMessage}. Last log: ${detail}`;
+                                }
                                 this.setStatus(statusCodes.FAILED, { errorMessage });
                                 finished();
                             }

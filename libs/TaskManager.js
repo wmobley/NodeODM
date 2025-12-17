@@ -84,55 +84,15 @@ class TaskManager{
     // Removes old tasks that have either failed, are completed, or
     // have been canceled.
     removeOldTasks(done){
-        if (!CLEANUP_TASKS_IF_OLDER_THAN){
-            logger.debug("Task cleanup disabled; skipping check for old tasks.");
-            if (done) done();
-            return;
-        }
-
-        let list = [];
-        let now = new Date().getTime();
-        logger.debug("Checking for old tasks to be removed...");
-
-        for (let uuid in this.tasks){
-            let task = this.tasks[uuid];
-
-            let dateFinished = task.dateCreated;
-            if (task.processingTime > 0) dateFinished += task.processingTime;
-
-            if ([statusCodes.FAILED,
-                statusCodes.COMPLETED,
-                statusCodes.CANCELED].indexOf(task.status.code) !== -1 &&
-                now - dateFinished > CLEANUP_TASKS_IF_OLDER_THAN){
-                list.push(task.uuid);
-            }
-        }
-
-        async.eachSeries(list, (uuid, cb) => {
-            logger.info(`Cleaning up old task ${uuid}`);
-            this.remove(uuid, cb);
-        }, done);
+        logger.warn("Task cleanup disabled in this build; skipping old task removal.");
+        if (done) done();
     }
 
     // Removes directories that don't have a corresponding
     // task associated with it (maybe as a cause of an abrupt exit)
     removeOrphanedDirectories(done){
-        logger.info("Checking for orphaned directories to be removed...");
-
-        fs.readdir(Directories.data, (err, entries) => {
-            if (err) done(err);
-            else{
-                async.eachSeries(entries, (entry, cb) => {
-                    let dirPath = path.join(Directories.data, entry);
-                    if (fs.statSync(dirPath).isDirectory() &&
-                        entry.match(/^[\w\d]+\-[\w\d]+\-[\w\d]+\-[\w\d]+\-[\w\d]+$/) &&
-                        !this.tasks[entry]){
-                        logger.info(`Found orphaned directory: ${entry}, removing...`);
-                        rmdir(dirPath, cb);
-                    }else cb();
-                }, done);
-            }
-        });
+        logger.warn("Orphaned directory cleanup disabled in this build; skipping.");
+        if (done) done();
     }
 
     removeStaleUploads(done){
@@ -258,20 +218,9 @@ class TaskManager{
     // Removes a task from the system.
     // Before being removed, the task is canceled.
     remove(uuid, cb){
-        this.cancel(uuid, err => {
-            if (!err){
-                let task = this.find(uuid, cb);
-                if (task){
-                    task.cleanup(err => {
-                        if (!err){
-                            delete(this.tasks[uuid]);
-                            this.processNextTask();
-                            cb(null);
-                        }else cb(err);
-                    });
-                }else; // cb is called by find on error
-            }else cb(err);
-        });
+        logger.warn(`Task removal disabled; ignoring request to remove ${uuid}`);
+        const err = new Error("Task removal disabled in this build.");
+        if (cb) cb(err);
     }
 
     // Restarts (puts back into QUEUED state)
