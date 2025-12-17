@@ -177,6 +177,35 @@ const hashFileSha256 = (filePath) => new Promise((resolve, reject) => {
     stream.on('end', () => resolve(hash.digest('hex')));
 });
 
+const describePathType = (stats) => {
+    if (stats.isDirectory()) return 'directory';
+    if (stats.isFile()) return 'file';
+    if (stats.isSymbolicLink()) return 'symlink';
+    return 'unknown';
+};
+
+const ensureDirectory = (dirPath, label, cb) => {
+    fs.lstat(dirPath, (err, stats) => {
+        if (err) return cb(err);
+        if (stats.isSymbolicLink()){
+            fs.stat(dirPath, (statErr, targetStats) => {
+                if (statErr) {
+                    return cb(new Error(`${label} is a broken symlink at ${dirPath} (${statErr.message})`));
+                }
+                if (!targetStats.isDirectory()) {
+                    return cb(new Error(`${label} is a symlink to a non-directory at ${dirPath}`));
+                }
+                return cb();
+            });
+            return;
+        }
+        if (!stats.isDirectory()) {
+            return cb(new Error(`${label} is not a directory (found ${describePathType(stats)} at ${dirPath})`));
+        }
+        return cb();
+    });
+};
+
 const logSeedZipDiagnostics = async (seedPath, uuid) => {
     try {
         const stats = await fs.promises.stat(seedPath);
@@ -488,6 +517,9 @@ module.exports = {
                 cb(err);
             }),
             cb => {
+                ensureDirectory(srcPath, `Upload staging path for task ${req.id}`, cb);
+            },
+            cb => {
                 // We attempt to do this multiple times,
                 // as antivirus software sometimes is scanning
                 // the folder while we try to move it, resulting in
@@ -510,6 +542,9 @@ module.exports = {
                     });
                 }
                 move();
+            },
+            cb => {
+                ensureDirectory(destImagesPath, `Images path for task ${req.id}`, cb);
             },
             // Zip files handling
             cb => {
