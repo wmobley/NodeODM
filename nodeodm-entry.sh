@@ -16,6 +16,9 @@ npm --version || true
 echo "[ENTRY] head -n 40 /var/www/index.js:"
 head -n 40 /var/www/index.js || true
 
+# Force ODM to prefer import_path submissions (avoid seed.zip fallback when shared storage is available)
+export ODM_REMOTE_USE_IMPORT_PATH=${ODM_REMOTE_USE_IMPORT_PATH:-1}
+
 echo "[ENTRY] incoming args: $*"
 
 # Always execute from /var/www so relative paths (package.json) resolve
