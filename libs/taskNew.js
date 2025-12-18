@@ -216,6 +216,37 @@ const logSeedZipDiagnostics = async (seedPath, uuid) => {
     }
 };
 
+const waitForStableFile = async (filePath, options = {}) => {
+    const maxWaitMs = options.maxWaitMs || 120000;
+    const intervalMs = options.intervalMs || 1000;
+    const requiredStableChecks = options.requiredStableChecks || 8;
+
+    let lastSize = -1;
+    let lastMtime = -1;
+    let stableCount = 0;
+    const start = Date.now();
+
+    while (Date.now() - start <= maxWaitMs) {
+        try {
+            const stats = await fs.promises.stat(filePath);
+            const size = stats.size;
+            const mtime = stats.mtimeMs;
+            if (size > 0 && size === lastSize && mtime === lastMtime) {
+                stableCount += 1;
+                if (stableCount >= requiredStableChecks) return true;
+            } else {
+                stableCount = 0;
+            }
+            lastSize = size;
+            lastMtime = mtime;
+        } catch (err) {
+            stableCount = 0;
+        }
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+    return false;
+};
+
 const upload = multer({
     storage: multer.diskStorage({
         destination: (req, file, cb) => {
@@ -554,6 +585,17 @@ module.exports = {
                     const seedSource = path.join(destImagesPath, "seed.zip");
 
                     async.series([
+                        // Wait for seed.zip to stabilize before any diagnostics
+                        cb => {
+                            waitForStableFile(seedSource, { maxWaitMs: 120000, intervalMs: 1000, requiredStableChecks: 8 })
+                                .then(stable => {
+                                    if (!stable) {
+                                        logger.warn(`[SEED DEBUG] seed.zip did not stabilize before handling for task ${req.id}`);
+                                    }
+                                    cb();
+                                })
+                                .catch(() => cb());
+                        },
                         // Log seed zip size/hash before moving it
                         cb => {
                             logSeedZipDiagnostics(seedSource, req.id)
