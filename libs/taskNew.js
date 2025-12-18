@@ -83,27 +83,7 @@ const normalizeImportPath = (rawPath) => {
     const trimmed = String(rawPath).trim();
     if (!trimmed) return { error: 'import_path cannot be empty.' };
 
-    const allowedRoots = (config.importPathRoots || [])
-        .filter(Boolean)
-        .map(root => path.resolve(root));
-
-    if (allowedRoots.length === 0) {
-        return { error: 'import_path support is not configured on this node.' };
-    }
-
     const resolved = path.resolve(trimmed);
-    const withinAllowed = allowedRoots.some(root => {
-        if (isAbsoluteRoot(root)) {
-            return resolved.startsWith(root);
-        }
-        const normalizedRoot = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-        return resolved === root || resolved.startsWith(normalizedRoot);
-    });
-
-    if (!withinAllowed) {
-        return { error: `Import path ${resolved} is not allowed on this node.` };
-    }
-
     try {
         const stats = fs.statSync(resolved);
         if (!stats.isDirectory()) {
