@@ -149,7 +149,10 @@ const envImportRoots = (process.env.NODEODM_IMPORT_PATH_ROOTS || '')
     .split(path.delimiter)
     .map(r => r.trim())
     .filter(Boolean);
-const combinedRoots = [...configImportRoots, ...envImportRoots];
+// Also honor a job-scoped working dir (used in Tapis deployments) if provided.
+const tapisJobRoot = process.env._tapisJobWorkingDir ? [process.env._tapisJobWorkingDir] : [];
+
+const combinedRoots = [...configImportRoots, ...envImportRoots, ...tapisJobRoot];
 config.importPathRoots = combinedRoots.map(root => path.resolve(root));
 
 // Detect 7z availability

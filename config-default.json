@@ -19,5 +19,7 @@
 	"token": "",
 	"authorizedIps": [],
 	"maxImages": "",
-	"importPathRoots": []
+	"importPathRoots": [
+		"/corral-repl/tacc/aci/PT2050/projects/PTDATAX-263/webodm/media"
+	]
 }
