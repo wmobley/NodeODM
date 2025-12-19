@@ -414,6 +414,63 @@ module.exports = {
                 logger.info(`Using import_path ${sharedImportPath} for task ${req.id}`);
             }
         }
+
+        // If we are using import_path, wait for the directory to appear and stabilize before proceeding.
+        // This avoids racing with upstream creation/copy (for example, submodels being written to shared storage).
+        const waitForImportPathReady = (cb) => {
+            if (!useSharedImport) return cb();
+            const maxWaitMs = 120000; // 2 minutes
+            const intervalMs = 1000;
+            const stableChecks = 5;
+            let stableCount = 0;
+            let lastStats = null;
+            const start = Date.now();
+
+            const check = () => {
+                fs.stat(sharedImportPath, (err, stats) => {
+                    if (err || !stats.isDirectory()) {
+                        if (Date.now() - start >= maxWaitMs) {
+                            return cb(new Error(`Import path ${sharedImportPath} did not become available within ${maxWaitMs / 1000}s`));
+                        }
+                        return setTimeout(check, intervalMs);
+                    }
+
+                    // Count images to detect stabilization
+                    fs.readdir(sharedImportPath, (readErr, entries) => {
+                        if (readErr) {
+                            if (Date.now() - start >= maxWaitMs) {
+                                return cb(new Error(`Import path ${sharedImportPath} could not be read within ${maxWaitMs / 1000}s`));
+                            }
+                            return setTimeout(check, intervalMs);
+                        }
+                        let imageCount = 0;
+                        entries.forEach(entry => {
+                            if (IMAGE_REGEX.test(entry)) imageCount++;
+                        });
+
+                        const snapshot = `${stats.size}:${stats.mtimeMs}:${imageCount}`;
+                        if (snapshot === lastStats) {
+                            stableCount += 1;
+                            if (stableCount >= stableChecks) {
+                                logger.info(`[IMPORT_PATH] ${sharedImportPath} stabilized with ~${imageCount} images (waited ${Math.round((Date.now() - start) / 1000)}s)`);
+                                return cb();
+                            }
+                        } else {
+                            stableCount = 0;
+                            lastStats = snapshot;
+                        }
+
+                        if (Date.now() - start >= maxWaitMs) {
+                            logger.warn(`[IMPORT_PATH] ${sharedImportPath} did not stabilize; continuing with best-effort (last count ~${imageCount})`);
+                            return cb();
+                        }
+                        setTimeout(check, intervalMs);
+                    });
+                });
+            };
+
+            check();
+        };
         
         let destPath = path.join(Directories.data, req.id);
         let destImagesPath = path.join(destPath, "images");
@@ -684,7 +741,7 @@ module.exports = {
             async.series([
                 cb => {
                     // Basic path check
-                    if (useSharedImport) return cb();
+                    if (useSharedImport) return waitForImportPathReady(cb);
                     fs.exists(srcPath, exists => {
                         if (exists) cb();
                         else cb(new Error(`Invalid UUID`));
