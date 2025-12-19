@@ -509,6 +509,9 @@ module.exports = {
                     else cb();
                 }),
                 cb => fs.symlink(sharedImportPath, destImagesPath, 'dir', err => {
+                    if (err && err.code === 'ENOENT') {
+                        logger.error(`[IMPORT_PATH] Shared import_path ${sharedImportPath} does not exist when creating images link for ${req.id}`);
+                    }
                     if (err && err.code === 'EEXIST') {
                         fs.unlink(destImagesPath, unlinkErr => {
                             if (unlinkErr) cb(unlinkErr);
@@ -516,6 +519,40 @@ module.exports = {
                         });
                     } else cb(err);
                 }),
+                cb => {
+                    // Sanity: import_path must be a directory, images symlink must point to a directory.
+                    fs.lstat(sharedImportPath, (err, stats) => {
+                        if (err) {
+                            logger.error(`[IMPORT_PATH] lstat failed for ${sharedImportPath}: ${err.message}`);
+                            return cb(err);
+                        }
+                        if (!stats.isDirectory()) {
+                            logger.error(`[IMPORT_PATH] import_path ${sharedImportPath} is not a directory (type ${describePathType(stats)})`);
+                            return cb(new Error(`import_path ${sharedImportPath} is not a directory`));
+                        }
+                        fs.lstat(destImagesPath, (linkErr, linkStats) => {
+                            if (linkErr) {
+                                logger.error(`[IMPORT_PATH] lstat failed for images path ${destImagesPath}: ${linkErr.message}`);
+                                return cb(linkErr);
+                            }
+                            if (!linkStats.isSymbolicLink()) {
+                                logger.warn(`[IMPORT_PATH] images path ${destImagesPath} is not a symlink; continuing but import_path may be misconfigured`);
+                                return cb();
+                            }
+                            fs.stat(destImagesPath, (statErr, imgStats) => {
+                                if (statErr) {
+                                    logger.error(`[IMPORT_PATH] stat of images link target failed ${destImagesPath}: ${statErr.message}`);
+                                    return cb(statErr);
+                                }
+                                if (!imgStats.isDirectory()) {
+                                    logger.error(`[IMPORT_PATH] images link ${destImagesPath} target is not a directory (type ${describePathType(imgStats)})`);
+                                    return cb(new Error(`images link target is not a directory (${describePathType(imgStats)})`));
+                                }
+                                return cb();
+                            });
+                        });
+                    });
+                },
                 cb => {
                     checkMaxImageLimits(cb);
                 },
