@@ -7,9 +7,58 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      OWNER: wmobley
+      IMAGE_NAME: ghcr.io/wmobley/nodeodm
+      ODM_TAG: ${{ github.event.client_payload.odm_tags }}
     steps:
       - name: Show payload
         run: |
           echo "ODM image: ${{ github.event.client_payload.odm_image }}"
           echo "ODM tags:  ${{ github.event.client_payload.odm_tags }}"
           echo "ODM sha:   ${{ github.event.client_payload.odm_sha }}"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              max-parallelism = 1
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ env.OWNER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Wait for ODM image tag to exist
+        run: |
+          if [ -z "$ODM_TAG" ]; then
+            echo "ERROR: ODM_TAG not provided in payload"
+            exit 1
+          fi
+          for i in {1..12}; do
+            if docker manifest inspect "$ODM_TAG" >/dev/null 2>&1; then
+              echo "Found $ODM_TAG"
+              exit 0
+            fi
+            echo "Waiting for $ODM_TAG to appear..."
+            sleep 10
+          done
+          echo "ERROR: ODM tag not available: $ODM_TAG"
+          exit 1
+      - name: Build and push NodeODM
+        uses: docker/build-push-action@v6
+        with:
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          build-args: |
+            BASE_ODM_IMAGE=${{ env.ODM_TAG }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
