@@ -1,0 +1,15 @@
+name: Build NodeODM on ODM publish
+
+on:
+  repository_dispatch:
+    types: [odm-image-published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show payload
+        run: |
+          echo "ODM image: ${{ github.event.client_payload.odm_image }}"
+          echo "ODM tags:  ${{ github.event.client_payload.odm_tags }}"
+          echo "ODM sha:   ${{ github.event.client_payload.odm_sha }}"

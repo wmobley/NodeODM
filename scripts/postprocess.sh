@@ -51,8 +51,13 @@ if [ ! -z "$pointcloud_input_path" ]; then
     fi
     
 
+    if [ -f "entwine_pointcloud" ]; then
+        echo "Found entwine_pointcloud as a file, removing (invalid EPT output)."
+        rm -f "entwine_pointcloud"
+    fi
+
     if hash entwine 2>/dev/null; then
-        if [ ! -e "entwine_pointcloud" ]; then
+        if [ ! -d "entwine_pointcloud" ]; then
             entwine build --threads $(nproc) --tmp "entwine_pointcloud-tmp" -i "$pointcloud_input_path" -o entwine_pointcloud
         else
             echo "Entwine point cloud is already built."
@@ -64,20 +69,10 @@ if [ ! -z "$pointcloud_input_path" ]; then
         fi
     fi
 
-    if hash untwine 2>/dev/null; then
-        if [ ! -e "entwine_pointcloud" ]; then
-            untwine --temp_dir "entwine_pointcloud-tmp" --files "$pointcloud_input_path" --output_dir entwine_pointcloud
-        else
-            echo "Entwine point cloud is already built."
-        fi
+    # Skip untwine: in this environment it can generate a single LAZ file
+    # named "entwine_pointcloud", which breaks WebODM's EPT lookup.
 
-        # Cleanup
-        if [ -e "entwine_pointcloud-tmp" ]; then
-            rm -fr "entwine_pointcloud-tmp"
-        fi
-    fi
-
-    if [ ! -e "entwine_pointcloud" ]; then
+    if [ ! -d "entwine_pointcloud" ]; then
         echo "Checking if PotreeConverter is available..."
         if hash PotreeConverter 2>/dev/null; then
             PotreeConverter "$pointcloud_input_path" -o potree_pointcloud --overwrite -a RGB CLASSIFICATION
