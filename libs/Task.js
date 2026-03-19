@@ -57,6 +57,7 @@ module.exports = class Task{
         this.webhook = webhook;
         this.skipPostProcessing = skipPostProcessing;
         this.outputs = utils.parseUnsafePathsList(outputs);
+        logger.info(`[OUTPUTS DEBUG] Task ctor uuid=${uuid} name=${name || ''} rawOutputs=${JSON.stringify(outputs || null)} parsedOutputs=${JSON.stringify(this.outputs)}`);
         this.progress = 0;
         this.imagesCountEstimate = imagesCountEstimate;
         this.initialized = false;
