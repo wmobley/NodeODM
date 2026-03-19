@@ -335,6 +335,7 @@ module.exports = {
             else{
                 req.body = body;
                 req.files = files;
+                logger.info(`[OUTPUTS DEBUG] handleCommit task=${req.id} name=${req.body.name || ''} rawOutputs=${JSON.stringify(req.body.outputs || null)}`);
 
                 const hasImportPath = !!getImportPathField(req.body);
                 if (req.files.length === 0 && !hasImportPath && !req.body.zipurl){
@@ -374,6 +375,7 @@ module.exports = {
                 });
             },
             cb => {
+                logger.info(`[OUTPUTS DEBUG] handleInit task=${req.id} name=${req.body.name || ''} rawOutputs=${JSON.stringify(req.body.outputs || null)}`);
                 fs.writeFile(bodyFile, JSON.stringify(req.body), {encoding: 'utf8'}, cb);
             },
             cb => {
@@ -801,6 +803,7 @@ module.exports = {
                     });
                 },
                 cb => {
+                    logger.info(`[OUTPUTS DEBUG] createTask task=${req.id} name=${req.body.name || ''} rawOutputs=${JSON.stringify(req.body.outputs || null)} importPath=${getImportPathField(req.body) || ''}`);
                     const task = new Task(req.id, req.body.name, req.body.options,
                             req.body.webhook,
                             req.body.skipPostProcessing === 'true',
