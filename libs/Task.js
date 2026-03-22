@@ -439,7 +439,35 @@ module.exports = class Task{
                         done();
                     });
                 };
-            }
+            };
+
+            const validateRequestedOutputs = (files) => {
+                return (done) => {
+                    if (!files || files.length === 0) {
+                        return done();
+                    }
+
+                    const sourcePath = !config.test ?
+                        this.getProjectFolderPath() :
+                        path.join("tests", "processing_results");
+
+                    const missingPaths = [];
+                    files.forEach(file => {
+                        if (!fs.existsSync(path.join(sourcePath, file))) {
+                            missingPaths.push(file);
+                        }
+                    });
+
+                    if (missingPaths.length > 0) {
+                        const message = `Requested outputs missing for ${this.uuid}: ${missingPaths.join(", ")}`;
+                        logger.warn(`[OUTPUTS DEBUG] ${message}`);
+                        this.output.push(message);
+                        done(new Error(message));
+                    } else {
+                        done();
+                    }
+                };
+            };
 
             // All paths are relative to the project directory (./data/<uuid>/)
             let allPaths = ['odm_orthophoto/odm_orthophoto.tif',
@@ -463,6 +491,10 @@ module.exports = class Task{
             if (this.outputs.length > 0) allPaths = this.outputs;
 
             let tasks = [];
+
+            if (this.outputs.length > 0) {
+                tasks.push(validateRequestedOutputs(allPaths));
+            }
 
             if (config.test){
                 if (config.testSkipOrthophotos){
