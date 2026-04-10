@@ -130,6 +130,54 @@ const copySupportFiles = (srcDir, dstDir, cb) => {
     });
 };
 
+const mirrorImportProjectEntries = (srcDir, destProjectDir, cb) => {
+    fs.readdir(srcDir, (err, entries) => {
+        if (err) return cb(err);
+
+        async.eachSeries(entries, (entry, done) => {
+            const srcEntry = path.join(srcDir, entry);
+            const dstEntry = path.join(destProjectDir, entry);
+
+            if (entry === 'images' || entry === 'gcp') return done();
+            if (/\.txt$/gi.test(entry) || /^align\.(las|laz|tif)$/gi.test(entry)) return done();
+            if (IMAGE_REGEX.test(entry)) return done();
+
+            fs.lstat(srcEntry, (statErr, stats) => {
+                if (statErr) return done(statErr);
+
+                const linkEntry = () => {
+                    fs.symlink(srcEntry, dstEntry, stats.isDirectory() ? 'dir' : 'file', linkErr => {
+                        if (!linkErr || linkErr.code === 'EEXIST') return done();
+                        return done(linkErr);
+                    });
+                };
+
+                fs.lstat(dstEntry, dstErr => {
+                    if (dstErr && dstErr.code !== 'ENOENT') return done(dstErr);
+                    if (!dstErr) {
+                        return removeDirectory(dstEntry, removeErr => {
+                            if (removeErr && removeErr.code !== 'ENOENT') return done(removeErr);
+                            fs.unlink(dstEntry, unlinkErr => {
+                                if (unlinkErr && unlinkErr.code !== 'ENOENT' && unlinkErr.code !== 'EISDIR') {
+                                    return done(unlinkErr);
+                                }
+                                if (unlinkErr && unlinkErr.code === 'EISDIR') {
+                                    return removeDirectory(dstEntry, rmDirErr => {
+                                        if (rmDirErr && rmDirErr.code !== 'ENOENT') return done(rmDirErr);
+                                        return linkEntry();
+                                    });
+                                }
+                                return linkEntry();
+                            });
+                        });
+                    }
+                    return linkEntry();
+                });
+            });
+        }, cb);
+    });
+};
+
 const preserveSeedZipEnv = process.env.NODEODM_PRESERVE_SEED_ZIP;
 const shouldPreserveSeedZips = !!preserveSeedZipEnv &&
     preserveSeedZipEnv !== '0' &&
@@ -557,6 +605,9 @@ module.exports = {
                 },
                 cb => {
                     checkMaxImageLimits(cb);
+                },
+                cb => {
+                    mirrorImportProjectEntries(sharedImportPath, destPath, cb);
                 },
                 cb => copySupportFiles(sharedImportPath, destGcpPath, err => {
                     if (err && err.code !== 'ENOENT') return cb(err);
