@@ -53,6 +53,7 @@ module.exports = class Task{
         this.alignFiles = [];
         this.imageGroupsFiles = [];
         this.output = [];
+        this.lastOutputAt = 0;
         this.runningProcesses = [];
         this.webhook = webhook;
         this.skipPostProcessing = skipPostProcessing;
@@ -62,6 +63,69 @@ module.exports = class Task{
         this.imagesCountEstimate = imagesCountEstimate;
         this.initialized = false;
         this.onInitialize = []; // Events to trigger on initialization
+        this._heartbeatInterval = null;
+    }
+
+    getTaskLogPaths(){
+        const projectPath = this.getProjectFolderPath();
+        return {
+            projectPath,
+            benchmark: path.join(projectPath, 'benchmark.txt'),
+            taskOutput: path.join(projectPath, 'task_output.txt'),
+            logJson: path.join(projectPath, 'log.json'),
+            allZip: path.join(projectPath, 'all.zip'),
+            meshingMarker: path.join(projectPath, 'odm_meshing', 'stage_marker.txt'),
+            meshingTmpMarker: path.join(projectPath, 'odm_meshing', 'tmp', 'stage_marker.txt'),
+            demMarker: path.join(projectPath, 'odm_dem', 'stage_marker.txt'),
+            orthophotoLog: path.join(projectPath, 'odm_orthophoto', 'odm_orthophoto_log.txt')
+        };
+    }
+
+    readLastLines(filePath, maxLines = 5){
+        try{
+            if (!fs.existsSync(filePath)) return [];
+            const text = fs.readFileSync(filePath, 'utf8');
+            return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).slice(-maxLines);
+        }catch (e){
+            return [`<read failed: ${e.message}>`];
+        }
+    }
+
+    logTaskSnapshot(label){
+        const paths = this.getTaskLogPaths();
+        const snapshot = {
+            status: this.status ? this.status.code : 'unknown',
+            progress: this.progress,
+            processingTime: this.processingTime,
+            lastOutputAgeSec: this.lastOutputAt ? Math.round((Date.now() - this.lastOutputAt) / 1000) : null,
+            benchmarkTail: this.readLastLines(paths.benchmark, 6),
+            meshingMarker: this.readLastLines(paths.meshingMarker, 3),
+            meshingTmpMarker: this.readLastLines(paths.meshingTmpMarker, 3),
+            demMarker: this.readLastLines(paths.demMarker, 3),
+            orthophotoLogTail: this.readLastLines(paths.orthophotoLog, 3),
+            outputTail: this.output.slice(-5),
+            files: {
+                taskOutput: fs.existsSync(paths.taskOutput),
+                logJson: fs.existsSync(paths.logJson),
+                allZip: fs.existsSync(paths.allZip)
+            }
+        };
+        logger.info(`[TASK DEBUG] ${label} ${this.uuid} ${JSON.stringify(snapshot)}`);
+    }
+
+    startHeartbeat(){
+        if (this._heartbeatInterval) return;
+        this._heartbeatInterval = setInterval(() => {
+            if (!this.isRunning()) return;
+            this.logTaskSnapshot('heartbeat');
+        }, 60000);
+    }
+
+    stopHeartbeat(){
+        if (this._heartbeatInterval){
+            clearInterval(this._heartbeatInterval);
+            this._heartbeatInterval = null;
+        }
     }
 
     initialize(done, additionalSteps = []){
@@ -214,12 +278,14 @@ module.exports = class Task{
     }
 
     setStatus(code, extra){
+        const previous = this.status ? this.status.code : null;
         this.status = {
             code: code
         };
         for (let k in extra){
             this.status[k] = extra[k];
         }
+        logger.info(`[TASK DEBUG] status transition ${this.uuid} ${previous} -> ${code}${extra ? ` extra=${JSON.stringify(extra)}` : ''}`);
     }
 
     updateProgress(globalProgress){
@@ -300,6 +366,8 @@ module.exports = class Task{
         const finished = err => {
             this.updateProgress(100);
             this.stopTrackingProcessingTime();
+            this.stopHeartbeat();
+            this.logTaskSnapshot(err ? `finished-with-error:${err.message}` : 'finished');
             done(err);
         };
 
@@ -307,6 +375,7 @@ module.exports = class Task{
             const createZipArchive = (outputFilename, files) => {
                 return (done) => {
                     this.output.push(`Compressing ${outputFilename}\n`);
+                    this.logTaskSnapshot(`archive-start:${outputFilename}`);
 
                     const zipFile = path.resolve(this.getAssetsArchivePath(outputFilename));
                     const sourcePath = !config.test ?
@@ -327,10 +396,12 @@ module.exports = class Task{
                     }, (err, code, _) => {
                         if (err){
                             logger.error(`Could not archive .zip file: ${err.message}`);
+                            this.logTaskSnapshot(`archive-error:${outputFilename}`);
                             done(err);
                         }else{
                             if (code === 0){
                                 this.updateProgress(97);
+                                this.logTaskSnapshot(`archive-complete:${outputFilename}`);
                                 done();
                             }else done(new Error(`Could not archive .zip file, 7z exited with code ${code}`));
                         }
@@ -414,6 +485,7 @@ module.exports = class Task{
 
             const runPostProcessingScript = () => {
                 return (done) => {
+                    this.logTaskSnapshot('postprocess-start');
                     this.runningProcesses.push(
                         processRunner.runPostProcessingScript({
                             projectFolderPath: this.getProjectFolderPath()
@@ -422,11 +494,13 @@ module.exports = class Task{
                             else{
                                 if (code === 0){
                                     this.updateProgress(93);
+                                    this.logTaskSnapshot('postprocess-complete');
                                     done();
                                 }else done(new Error(`Postprocessing failed (${code})`));
                             }
                         }, output => {
                             this.output.push(output);
+                            this.lastOutputAt = Date.now();
                         })
                     );
                 };
@@ -434,8 +508,10 @@ module.exports = class Task{
 
             const saveTaskOutput = (destination) => {
                 return (done) => {
+                    this.logTaskSnapshot('task-output-write-start');
                     fs.writeFile(destination, this.output.join("\n"), err => {
                         if (err) logger.info(`Cannot write log at ${destination}, skipping...`);
+                        else this.logTaskSnapshot('task-output-write-complete');
                         done();
                     });
                 };
@@ -574,6 +650,7 @@ module.exports = class Task{
 
         if (this.status.code === statusCodes.QUEUED){
             this.startTrackingProcessingTime();
+            this.startHeartbeat();
             this.dateStarted = new Date().getTime();
             this.setStatus(statusCodes.RUNNING);
 
@@ -597,7 +674,12 @@ module.exports = class Task{
                 runnerOptions["split-image-groups"] = fs.realpathSync(path.join(this.getGcpFolderPath(), this.imageGroupsFiles[0]));
             }
 
+            logger.info(`[TASK DEBUG] launching ODM task ${this.uuid} options=${JSON.stringify(runnerOptions)}`);
+            this.logTaskSnapshot('launch-before-runner');
+
             this.runningProcesses.push(odmRunner.run(runnerOptions, this.uuid, (err, code, signal) => {
+                    logger.info(`[TASK DEBUG] ODM child finished for ${this.uuid} err=${err ? err.message : 'null'} code=${code} signal=${signal || 'null'}`);
+                    this.logTaskSnapshot('child-exit');
                     if (err){
                         this.setStatus(statusCodes.FAILED, {errorMessage: `Could not start process (${err.message})`});
                         finished(err);
@@ -653,6 +735,7 @@ module.exports = class Task{
                     // Split lines and trim
                     output.trim().split('\n').forEach(line => {
                         this.output.push(line.trim());
+                        this.lastOutputAt = Date.now();
                     });
                 })
             );
