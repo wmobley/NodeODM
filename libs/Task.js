@@ -206,7 +206,6 @@ module.exports = class Task{
         };
 
         return [
-            autoSet("pc-ept"),
             autoSet("cog"),
             autoSet("gltf")
         ];
