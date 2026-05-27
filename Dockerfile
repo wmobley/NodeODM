@@ -1,4 +1,4 @@
-ARG BASE_ODM_IMAGE=opendronemap/odm:latest
+ARG BASE_ODM_IMAGE=ghcr.io/wmobley/odm:latest
 FROM ${BASE_ODM_IMAGE}
 LABEL maintainer="Piero Toffanin <pt@masseranolabs.com>"
 

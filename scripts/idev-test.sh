@@ -5,7 +5,7 @@ set -euo pipefail
 JOBDIR=${JOBDIR:-/scratch/06659/wmobley/nodeodm/nodeodm-ls6}
 WORK_DIR=${WORK_DIR:-$(ls -d "$JOBDIR"/nodeodm_workdir_*admin* 2>/dev/null | head -n1)}
 NODEODM_RUNTIME_DIR=${NODEODM_RUNTIME_DIR:-"$WORK_DIR/runtime"}
-IMAGE=${NODEODM_IMAGE:-ghcr.io/wmobley/nodeodm:latest}
+IMAGE=${NODEODM_IMAGE:-ghcr.io/wmobley/nodeodm:gpu}
 
 if [ -z "${WORK_DIR:-}" ] || [ ! -f "$WORK_DIR/nodeodm-config.json" ]; then
   echo "WORK_DIR/nodeodm-config.json not found. Set WORK_DIR or run the job once to create it." >&2

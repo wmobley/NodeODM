@@ -21,6 +21,7 @@ let os = require('os');
 let path = require('path');
 let assert = require('assert');
 let spawn = require('child_process').spawn;
+let crypto = require('crypto');
 let config = require('../config.js');
 let logger = require('./logger');
 let utils = require('./utils');
@@ -73,6 +74,17 @@ module.exports = {
         // Launch
         const env = utils.clone(process.env);
         env.ODM_NONINTERACTIVE = 1;
+        env.ODM_REMOTE_USE_IMPORT_PATH = env.ODM_REMOTE_USE_IMPORT_PATH || "1";
+        logger.info(`ODM split-merge import_path env: ODM_REMOTE_USE_IMPORT_PATH=${env.ODM_REMOTE_USE_IMPORT_PATH}, ODM_IMPORT_PATH_BASE=${env.ODM_IMPORT_PATH_BASE || ""}, NODEODM_IMPORT_PATH_ROOTS=${env.NODEODM_IMPORT_PATH_ROOTS || ""}, _tapisJobWorkingDir=${env._tapisJobWorkingDir || ""}`);
+        logger.info(`ODM split-merge launch context: command=${command}, cwd=${config.odm_path}, projectName=${projectName}, projectPath=${options["project-path"]}`);
+        try {
+            const remotePath = path.join(config.odm_path, "opendm", "remote.py");
+            const remoteContent = fs.readFileSync(remotePath);
+            const remoteSha = crypto.createHash("sha256").update(remoteContent).digest("hex");
+            logger.info(`ODM remote.py runtime check: path=${remotePath}, sha256=${remoteSha}, importPathMarker=${remoteContent.includes("ODM_REMOTE_USE_IMPORT_PATH")}, manualPostMarker=${remoteContent.includes("Attempting import_path submission")}`);
+        } catch (e) {
+            logger.warn(`ODM remote.py runtime check failed: ${e.message}`);
+        }
         let childProcess = spawn(command, params, {cwd: config.odm_path, env});
 
         childProcess

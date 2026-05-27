@@ -6,8 +6,9 @@ on:
     - master
     tags:
     - v*
-  
-  # Triggered by ODM build (after docker push)
+
+  repository_dispatch:
+    types: [odm-gpu-image-published]
   workflow_dispatch:
 
 jobs:
@@ -19,7 +20,7 @@ jobs:
     env:
       OWNER: wmobley
       IMAGE_NAME: ghcr.io/wmobley/nodeodm
-      BASE_ODM_IMAGE: ghcr.io/wmobley/odm:gpu
+      BASE_ODM_IMAGE: ${{ github.event.client_payload.odm_tag || 'ghcr.io/wmobley/odm:gpu' }}
       GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
     steps:
     - name: Checkout
@@ -36,6 +37,18 @@ jobs:
         registry: ghcr.io
         username: ${{ env.OWNER }}
         password: ${{ env.GHCR_TOKEN }}
+    - name: Wait for ODM GPU image tag to exist
+      run: |
+        for i in {1..12}; do
+          if docker manifest inspect "${BASE_ODM_IMAGE}" >/dev/null 2>&1; then
+            echo "Found ${BASE_ODM_IMAGE}"
+            exit 0
+          fi
+          echo "Waiting for ${BASE_ODM_IMAGE} to appear..."
+          sleep 10
+        done
+        echo "ERROR: ODM GPU tag not available: ${BASE_ODM_IMAGE}"
+        exit 1
     # Use the repository information of the checked-out code to format docker tags
     - name: Docker meta
       id: docker_meta

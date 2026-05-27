@@ -440,6 +440,7 @@ module.exports = {
         const rawImportPath = getImportPathField(req.body);
         const hasUploadedFiles = Array.isArray(req.files) && req.files.length > 0;
         const hasZipUrl = !!req.body.zipurl;
+        logger.info(`[IMPORT_PATH DEBUG] task ${req.id}: rawImportPath=${rawImportPath || ""}, uploadedFiles=${hasUploadedFiles ? req.files.length : 0}, zipurl=${hasZipUrl}, NODEODM_IMPORT_PATH_ROOTS=${process.env.NODEODM_IMPORT_PATH_ROOTS || ""}, ODM_IMPORT_PATH_BASE=${process.env.ODM_IMPORT_PATH_BASE || ""}`);
 
         // Print error message and cleanup
         const die = (error) => {
@@ -462,6 +463,13 @@ module.exports = {
                 sharedImportPath = result.path;
                 useSharedImport = true;
                 logger.info(`Using import_path ${sharedImportPath} for task ${req.id}`);
+                try {
+                    const stats = fs.statSync(sharedImportPath);
+                    const entries = stats.isDirectory() ? fs.readdirSync(sharedImportPath).slice(0, 20) : [];
+                    logger.info(`[IMPORT_PATH DEBUG] task ${req.id}: accepted path exists type=${stats.isDirectory() ? "dir" : "file"} size=${stats.size} mtime=${stats.mtime.toISOString()} entries=${entries.join(",")}`);
+                } catch (e) {
+                    logger.warn(`[IMPORT_PATH DEBUG] task ${req.id}: accepted path stat failed for ${sharedImportPath}: ${e.message}`);
+                }
             }
         }
 
@@ -497,6 +505,7 @@ module.exports = {
                         entries.forEach(entry => {
                             if (IMAGE_REGEX.test(entry)) imageCount++;
                         });
+                        logger.info(`[IMPORT_PATH DEBUG] task ${req.id}: readiness check path=${sharedImportPath}, entries=${entries.length}, topLevelImages=${imageCount}, stableCount=${stableCount}`);
 
                         const snapshot = `${stats.size}:${stats.mtimeMs}:${imageCount}`;
                         if (snapshot === lastStats) {

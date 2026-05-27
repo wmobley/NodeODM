@@ -1,4 +1,4 @@
-ARG BASE_NODEODM_GPU_IMAGE=opendronemap/nodeodm:gpu
+ARG BASE_NODEODM_GPU_IMAGE=ghcr.io/wmobley/nodeodm:gpu
 FROM ${BASE_NODEODM_GPU_IMAGE}
 
 EXPOSE 3000
