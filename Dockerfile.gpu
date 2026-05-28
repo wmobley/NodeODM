@@ -42,7 +42,7 @@ PY
 
 RUN echo /usr/local/cuda-11.2/compat >> /etc/ld.so.conf.d/989_cuda-11.conf && ldconfig
 
-RUN npm install --production && mkdir -p tmp && node index.js --powercycle
+RUN bash -lc 'source "$NVM_DIR/nvm.sh" && nvm use "$NODE_VERSION" && mkdir -p tmp && node index.js --powercycle'
 
 RUN chown -R odm:odm /var/www
 RUN chown -R odm:odm /code
