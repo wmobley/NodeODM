@@ -24,6 +24,7 @@ RUN apt-get update && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
     ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
     ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal && \
+    ln -sf /code/SuperBuild/install/bin/PotreeConverter /usr/bin/PotreeConverter && \
     ln -s /var/www/node.sh /usr/bin/node
 from pathlib import Path
 path = Path("/code/venv/lib/python3.12/site-packages/exifread/core/exif_header.py")
