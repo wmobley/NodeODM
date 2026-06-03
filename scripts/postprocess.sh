@@ -51,33 +51,42 @@ if [ ! -z "$pointcloud_input_path" ]; then
     fi
     
 
-    if hash entwine 2>/dev/null; then
-        if [ ! -e "entwine_pointcloud" ]; then
-            entwine build --threads $(nproc) --tmp "entwine_pointcloud-tmp" -i "$pointcloud_input_path" -o entwine_pointcloud
-        else
-            echo "Entwine point cloud is already built."
+    if [ "${ODM_DISABLE_ENTWINE:-1}" != "0" ]; then
+        echo "Skipping Entwine (ODM_DISABLE_ENTWINE=${ODM_DISABLE_ENTWINE:-1})"
+    else
+        if hash entwine 2>/dev/null; then
+            if [ ! -e "entwine_pointcloud" ]; then
+                entwine build --threads $(nproc) --tmp "entwine_pointcloud-tmp" -i "$pointcloud_input_path" -o entwine_pointcloud
+            else
+                echo "Entwine point cloud is already built."
+            fi
+
+            # Cleanup
+            if [ -e "entwine_pointcloud-tmp" ]; then
+                rm -fr "entwine_pointcloud-tmp"
+            fi
         fi
-        
-        # Cleanup
-        if [ -e "entwine_pointcloud-tmp" ]; then
-            rm -fr "entwine_pointcloud-tmp"
+
+        if hash untwine 2>/dev/null; then
+            if [ ! -e "entwine_pointcloud" ]; then
+                untwine_threads="${ODM_UNTWINE_THREADS:-$(nproc)}"
+                if untwine --help 2>&1 | grep -q -- '--threads'; then
+                    untwine --temp_dir "entwine_pointcloud-tmp" --threads "$untwine_threads" --files "$pointcloud_input_path" --output_dir entwine_pointcloud
+                else
+                    untwine --temp_dir "entwine_pointcloud-tmp" --files "$pointcloud_input_path" --output_dir entwine_pointcloud
+                fi
+            else
+                echo "Entwine point cloud is already built."
+            fi
+
+            # Cleanup
+            if [ -e "entwine_pointcloud-tmp" ]; then
+                rm -fr "entwine_pointcloud-tmp"
+            fi
         fi
     fi
 
-    if hash untwine 2>/dev/null; then
-        if [ ! -e "entwine_pointcloud" ]; then
-            untwine --temp_dir "entwine_pointcloud-tmp" --files "$pointcloud_input_path" --output_dir entwine_pointcloud
-        else
-            echo "Entwine point cloud is already built."
-        fi
-
-        # Cleanup
-        if [ -e "entwine_pointcloud-tmp" ]; then
-            rm -fr "entwine_pointcloud-tmp"
-        fi
-    fi
-
-    if [ ! -e "entwine_pointcloud" ]; then
+    if [ ! -e "entwine_pointcloud" ] || [ "${ODM_DISABLE_ENTWINE:-1}" != "0" ]; then
         echo "Checking if PotreeConverter is available..."
         if hash PotreeConverter 2>/dev/null; then
             PotreeConverter "$pointcloud_input_path" -o potree_pointcloud --overwrite -a RGB CLASSIFICATION

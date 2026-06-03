@@ -9,7 +9,8 @@ RUN curl --silent --location https://deb.nodesource.com/setup_14.x | bash -
 RUN apt-get install -y nodejs unzip p7zip-full && npm install -g nodemon && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
     ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
-    ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal
+    ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal && \
+    ln -sf /code/SuperBuild/install/bin/PotreeConverter /usr/bin/PotreeConverter
 
 RUN echo /usr/local/cuda-11.2/compat >> /etc/ld.so.conf.d/989_cuda-11.conf && ldconfig
 
