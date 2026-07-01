@@ -17,6 +17,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 "use strict";
 
+// Group-writable default (rw-rw-r-- files, rwxrwxr-x dirs). When results are written
+// into the shared corral WebODM media tree (setgid, owned by the allocation group),
+// this keeps them g+rw so WebODM and other group members can manage them instead of
+// files landing group-read-only. Overridable via the NODEODM_UMASK env var.
+// See docs/design/2026-07-01-corral-ownership-group-inheritance.md (odm-suite)
+process.umask(process.env.NODEODM_UMASK ? parseInt(process.env.NODEODM_UMASK, 8) : 0o002);
+
 const fs = require('fs');
 const path = require('path');
 const config = require('./config.js');
