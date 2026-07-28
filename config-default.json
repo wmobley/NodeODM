@@ -20,6 +20,6 @@
 	"authorizedIps": [],
 	"maxImages": "",
 	"importPathRoots": [
-		"/corral-repl/tacc/aci/PT2050/projects/PTDATAX-263/webodm/media"
+		"/corral/utexas/BCS26030/webodm/media"
 	]
 }
