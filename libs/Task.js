@@ -37,6 +37,15 @@ const archiver = require('archiver');
 
 const statusCodes = require('./statusCodes');
 
+// ODM only produces these when a submodel's orthophoto cutline actually
+// intersects its neighbors (see ODM's odm_orthophoto stage); a submodel
+// finishing without them is a valid outcome, not a processing failure.
+const OPTIONAL_OUTPUT_PATHS = new Set([
+    'odm_orthophoto/cutline.gpkg',
+    'odm_orthophoto/odm_orthophoto_cut.tif',
+    'odm_orthophoto/odm_orthophoto_feathered.tif'
+]);
+
 module.exports = class Task{
     constructor(uuid, name, options = [], webhook = null, skipPostProcessing = false, outputs = [], dateCreated = new Date().getTime(), imagesCountEstimate = -1){
         assert(uuid !== undefined, "uuid must be set");
@@ -528,6 +537,7 @@ module.exports = class Task{
 
                     const missingPaths = [];
                     files.forEach(file => {
+                        if (OPTIONAL_OUTPUT_PATHS.has(file)) return;
                         if (!fs.existsSync(path.join(sourcePath, file))) {
                             missingPaths.push(file);
                         }
