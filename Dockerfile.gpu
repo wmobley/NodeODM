@@ -36,6 +36,7 @@ RUN apt-get update && \
       'export PROJ_LIB="${PROJ_LIB:-/opt/entwine-env/share/proj}"' \
       'exec /opt/entwine-env/bin/entwine "$@"' > /usr/local/bin/entwine && \
     chmod +x /usr/local/bin/entwine && \
+    ln -sf /usr/local/bin/entwine /code/SuperBuild/install/bin/entwine && \
     python3 -m pip install --no-cache-dir vmem --upgrade exifread && \
     python3 - <<'PY' && \
     bash install_deps.sh && \
