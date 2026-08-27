@@ -25,9 +25,9 @@ run_entwine_with_backoff() {
     local tmp_path="entwine_pointcloud-tmp"
     local available_threads
     local max_threads
-    local thread_candidates
     local tried_threads=" "
     local thread_count
+    local next_thread_count
     local exit_code
 
     available_threads=$(nproc 2>/dev/null || echo 1)
@@ -45,32 +45,44 @@ run_entwine_with_backoff() {
         max_threads="$available_threads"
     fi
 
-    thread_candidates="$max_threads 16 8 4 2 1"
+    thread_count="$max_threads"
 
-    for thread_count in $thread_candidates; do
-        if [ "$thread_count" -gt "$max_threads" ]; then
-            continue
-        fi
-
+    while [ "$thread_count" -ge 1 ]; do
         case "$tried_threads" in
-            *" $thread_count "*) continue ;;
+            *" $thread_count "*) ;;
+            *)
+                tried_threads="$tried_threads$thread_count "
+
+                echo "Running Entwine with $thread_count thread(s)..."
+                rm -fr "$output_path" "$tmp_path"
+
+                entwine build --threads "$thread_count" --tmp "$tmp_path" -i "$input_path" -o "$output_path"
+                exit_code=$?
+
+                if [ "$exit_code" -eq 0 ] && [ -f "$output_path/ept.json" ]; then
+                    echo "Entwine generated $output_path/ept.json with $thread_count thread(s)."
+                    rm -fr "$tmp_path"
+                    return 0
+                fi
+
+                echo "Entwine failed or produced incomplete output with $thread_count thread(s) (exit code $exit_code)."
+                rm -fr "$output_path" "$tmp_path"
+                ;;
         esac
-        tried_threads="$tried_threads$thread_count "
 
-        echo "Running Entwine with $thread_count thread(s)..."
-        rm -fr "$output_path" "$tmp_path"
-
-        entwine build --threads "$thread_count" --tmp "$tmp_path" -i "$input_path" -o "$output_path"
-        exit_code=$?
-
-        if [ "$exit_code" -eq 0 ] && [ -f "$output_path/ept.json" ]; then
-            echo "Entwine generated $output_path/ept.json with $thread_count thread(s)."
-            rm -fr "$tmp_path"
-            return 0
+        if [ "$thread_count" -eq 1 ]; then
+            break
         fi
 
-        echo "Entwine failed or produced incomplete output with $thread_count thread(s) (exit code $exit_code)."
-        rm -fr "$output_path" "$tmp_path"
+        next_thread_count=$((thread_count * 2 / 3))
+        if [ "$next_thread_count" -ge "$thread_count" ]; then
+            next_thread_count=$((thread_count - 1))
+        fi
+        if [ "$next_thread_count" -lt 1 ]; then
+            next_thread_count=1
+        fi
+
+        thread_count="$next_thread_count"
     done
 
     echo "Entwine failed for all attempted thread counts; falling back to PotreeConverter if available."
