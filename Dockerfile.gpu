@@ -8,6 +8,7 @@ USER root
 
 ENV NVM_DIR=/usr/local/nvm
 ENV NODE_VERSION=14
+ENV MAMBA_ROOT_PREFIX=/opt/micromamba
 
 RUN mkdir /var/www
 
@@ -15,14 +16,31 @@ WORKDIR "/var/www"
 RUN useradd -m -d "/home/odm" -s /bin/bash odm
 COPY --chown=odm:odm . /var/www
 
-# Install Python helpers needed in our environment, then run upstream install script (nvm + npm deps)
+# Install Python helpers needed in our environment, a known-good Entwine
+# toolchain, then run upstream install script (nvm + npm deps).
+#
+# The Entwine binary bundled in the ODM SuperBuild has been observed to abort
+# with a double-free on LS6/Apptainer even for `entwine --version`. Keep ODM's
+# SuperBuild tools available, but route `entwine` through a conda-forge build
+# whose matching runtime libraries live together in /opt/entwine-env.
 RUN apt-get update && \
-    apt-get install -y ca-certificates python3-dateutil python3-repoze.lru python3-psutil python3-pip && \
+    apt-get install -y ca-certificates curl bzip2 python3-dateutil python3-repoze.lru python3-psutil python3-pip && \
+    curl -L https://micro.mamba.pm/api/micromamba/linux-64/latest -o /tmp/micromamba.tar.bz2 && \
+    tar -xjf /tmp/micromamba.tar.bz2 -C /usr/local/bin --strip-components=1 bin/micromamba && \
+    rm -f /tmp/micromamba.tar.bz2 && \
+    micromamba create -y -p /opt/entwine-env -c conda-forge entwine pdal && \
+    micromamba clean -a -y && \
+    printf '%s\n' '#!/bin/sh' \
+      'export LD_LIBRARY_PATH="/opt/entwine-env/lib:${LD_LIBRARY_PATH:-}"' \
+      'export GDAL_DATA="${GDAL_DATA:-/opt/entwine-env/share/gdal}"' \
+      'export PROJ_LIB="${PROJ_LIB:-/opt/entwine-env/share/proj}"' \
+      'exec /opt/entwine-env/bin/entwine "$@"' > /usr/local/bin/entwine && \
+    chmod +x /usr/local/bin/entwine && \
     python3 -m pip install --no-cache-dir vmem --upgrade exifread && \
     python3 - <<'PY' && \
     bash install_deps.sh && \
     ln -s /code/SuperBuild/install/bin/untwine /usr/bin/untwine && \
-    ln -s /code/SuperBuild/install/bin/entwine /usr/bin/entwine && \
+    ln -sf /usr/local/bin/entwine /usr/bin/entwine && \
     ln -s /code/SuperBuild/install/bin/pdal /usr/bin/pdal && \
     ln -sf /code/SuperBuild/install/bin/PotreeConverter /usr/bin/PotreeConverter && \
     ln -s /var/www/node.sh /usr/bin/node
