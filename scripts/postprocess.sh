@@ -31,10 +31,14 @@ run_entwine_with_backoff() {
     local exit_code
 
     available_threads=$(nproc 2>/dev/null || echo 1)
-    max_threads=${ODM_ENTWINE_MAX_THREADS:-16}
+    max_threads=${ODM_ENTWINE_MAX_THREADS:-$((available_threads / 2))}
 
     if ! [[ "$max_threads" =~ ^[0-9]+$ ]] || [ "$max_threads" -lt 1 ]; then
-        max_threads=16
+        max_threads=$((available_threads / 2))
+    fi
+
+    if [ "$max_threads" -lt 1 ]; then
+        max_threads=1
     fi
 
     if [ "$available_threads" -lt "$max_threads" ]; then
