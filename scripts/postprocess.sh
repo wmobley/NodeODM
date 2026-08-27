@@ -19,6 +19,60 @@ script_path=$(realpath $(dirname "$0"))
 cd "$script_path/../$1"
 echo "Postprocessing: $(pwd)"
 
+run_entwine_with_backoff() {
+    local input_path="$1"
+    local output_path="entwine_pointcloud"
+    local tmp_path="entwine_pointcloud-tmp"
+    local available_threads
+    local max_threads
+    local thread_candidates
+    local tried_threads=" "
+    local thread_count
+    local exit_code
+
+    available_threads=$(nproc 2>/dev/null || echo 1)
+    max_threads=${ODM_ENTWINE_MAX_THREADS:-16}
+
+    if ! [[ "$max_threads" =~ ^[0-9]+$ ]] || [ "$max_threads" -lt 1 ]; then
+        max_threads=16
+    fi
+
+    if [ "$available_threads" -lt "$max_threads" ]; then
+        max_threads="$available_threads"
+    fi
+
+    thread_candidates="$max_threads 16 8 4 2 1"
+
+    for thread_count in $thread_candidates; do
+        if [ "$thread_count" -gt "$max_threads" ]; then
+            continue
+        fi
+
+        case "$tried_threads" in
+            *" $thread_count "*) continue ;;
+        esac
+        tried_threads="$tried_threads$thread_count "
+
+        echo "Running Entwine with $thread_count thread(s)..."
+        rm -fr "$output_path" "$tmp_path"
+
+        entwine build --threads "$thread_count" --tmp "$tmp_path" -i "$input_path" -o "$output_path"
+        exit_code=$?
+
+        if [ "$exit_code" -eq 0 ] && [ -f "$output_path/ept.json" ]; then
+            echo "Entwine generated $output_path/ept.json with $thread_count thread(s)."
+            rm -fr "$tmp_path"
+            return 0
+        fi
+
+        echo "Entwine failed or produced incomplete output with $thread_count thread(s) (exit code $exit_code)."
+        rm -fr "$output_path" "$tmp_path"
+    done
+
+    echo "Entwine failed for all attempted thread counts; falling back to PotreeConverter if available."
+    return 1
+}
+
 # Generate point cloud (if entwine, untwine or potreeconverter is available)
 pointcloud_input_path=""
 for path in "odm_georeferencing/odm_georeferenced_model.laz" \
@@ -61,11 +115,7 @@ if [ ! -z "$pointcloud_input_path" ]; then
     else
         if hash entwine 2>/dev/null; then
             if [ ! -d "entwine_pointcloud" ]; then
-                entwine build --threads $(nproc) --tmp "entwine_pointcloud-tmp" -i "$pointcloud_input_path" -o entwine_pointcloud
-                if [ ! -f "entwine_pointcloud/ept.json" ]; then
-                    echo "Entwine did not produce entwine_pointcloud/ept.json; removing partial output."
-                    rm -fr "entwine_pointcloud"
-                fi
+                run_entwine_with_backoff "$pointcloud_input_path"
             else
                 echo "Entwine point cloud is already built."
             fi
